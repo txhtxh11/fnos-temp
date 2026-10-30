@@ -62,8 +62,15 @@ namespace FnOsTempTray
         {
             try
             {
+                string path = Path.Combine(BaseDir, "app.log");
+                // 简单日志轮转：超过 512KB 直接清空，避免日志无限增长占用磁盘
+                if (File.Exists(path))
+                {
+                    FileInfo fi = new FileInfo(path);
+                    if (fi.Length > 512 * 1024) File.Delete(path);
+                }
                 File.AppendAllText(
-                    Path.Combine(BaseDir, "app.log"),
+                    path,
                     DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + message + Environment.NewLine,
                     Encoding.UTF8);
             }
@@ -79,7 +86,8 @@ namespace FnOsTempTray
         public string Auth = "key";
         public string KeyPath = "";
         public string PasswordEnc = "";
-        public int IntervalSeconds = 2;
+        // 默认 10 秒：CPU 温度变化缓慢，高频 SSH 轮询没有必要，低频更省资源
+        public int IntervalSeconds = 10;
         public bool ShowTrayIcon = true;
 
         public static string FilePath
@@ -179,10 +187,11 @@ namespace FnOsTempTray
                 if (File.Exists(LinkPath)) File.Delete(LinkPath);
                 return;
             }
-            string exe = Path.Combine(Program.BaseDir, "FnosTempOverlay.exe");
+            string ps1 = Path.Combine(Program.BaseDir, "FnOsTempOverlay.ps1");
             string vbs =
                 "Set sh = CreateObject(\"WScript.Shell\")\r\n" +
-                "sh.Run \"\"\"" + exe + "\"\"\", 0, False\r\n";
+                "sh.Run \"powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\"" +
+                ps1 + "\"\"\", 0, False\r\n";
             File.WriteAllText(LinkPath, vbs, Encoding.Unicode);
         }
     }
@@ -331,12 +340,13 @@ done
             _icon = CreateIcon("--");
             _notify = new NotifyIcon();
             _notify.Icon = _icon;
-            _notify.Text = "linux-cpu温度 v1.0.0";
+            _notify.Text = "linux-cpu温度 v1.1.0";
             _notify.Visible = _config.ShowTrayIcon;
             _notify.DoubleClick += delegate { OpenSettings(); };
 
             var menu = new ContextMenuStrip();
             menu.Items.Add("设置…", null, delegate { OpenSettings(); });
+            menu.Items.Add("立即刷新", null, delegate { RefreshNow(); });
             menu.Items.Add("托盘设置", null, delegate
             {
                 try { Process.Start("ms-settings:taskbar"); } catch { }
@@ -362,7 +372,26 @@ done
             else if (t < 0 && _last != -2)
             {
                 _last = -2;
-                ReplaceIcon("--", "linux-cpu温度");
+                string err = _reader.LastError;
+                string tip = string.IsNullOrEmpty(err)
+                    ? "linux-cpu温度"
+                    : "linux-cpu温度（连接失败，等待重试）";
+                ReplaceIcon("--", tip);
+            }
+        }
+
+        // 重启读取线程：立刻重建 SSH 连接并读取一次温度（不等下一轮询周期）
+        private void RefreshNow()
+        {
+            try
+            {
+                _reader.Stop();
+                _reader = new TempReader(_config);
+                _reader.Start();
+            }
+            catch (Exception ex)
+            {
+                Program.Log("RefreshNow: " + ex);
             }
         }
 
@@ -487,7 +516,7 @@ done
 
             // 品牌行：左 名称+版本，右 TXH
             var brandLeft = new Label();
-            brandLeft.Text = "linux-cpu温度 v1.0.0";
+            brandLeft.Text = "linux-cpu温度 v1.1.0";
             brandLeft.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold, GraphicsUnit.Point);
             brandLeft.AutoSize = true;
             brandLeft.Location = new Point(20, 10);
@@ -780,18 +809,6 @@ done
             }
             string password = _password.Text.Length > 0 ? _password.Text : _config.GetPassword();
             return new SshClient(host, port, user, password);
-        }
-    }
-}
-
-namespace FnOsTempTray
-{
-    public static class Launcher
-    {
-        [STAThread]
-        public static void Main()
-        {
-            Program.Run("");
         }
     }
 }

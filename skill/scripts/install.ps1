@@ -40,7 +40,7 @@ if (-not $NoStart) {
 
 # 2. 建目录并复制文件
 New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
-$files = 'FnOsTempOverlay.ps1','FnOsTempOverlay.cs','Renci.SshNet.dll','启动linux-cpu温度.vbs','退出linux-cpu温度.cmd','stop.ps1'
+$files = 'FnOsTempOverlay.ps1','FnOsTempOverlay.cs','Renci.SshNet.dll','启动linux-cpu温度.vbs','退出linux-cpu温度.cmd','stop.ps1','uninstall.ps1'
 foreach ($f in $files) {
   Copy-Item -LiteralPath (Join-Path $assets $f) -Destination $TargetDir -Force
 }
@@ -53,7 +53,7 @@ if (-not $hadConfig) {
 Get-ChildItem -LiteralPath $TargetDir -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
 
 # 3. 校验关键文件
-$need = @('FnOsTempOverlay.ps1','FnOsTempOverlay.cs','Renci.SshNet.dll','启动linux-cpu温度.vbs','退出linux-cpu温度.cmd','stop.ps1')
+$need = @('FnOsTempOverlay.ps1','FnOsTempOverlay.cs','Renci.SshNet.dll','启动linux-cpu温度.vbs','退出linux-cpu温度.cmd','stop.ps1','uninstall.ps1')
 foreach ($f in $need) {
   if (-not (Test-Path (Join-Path $TargetDir $f))) { throw "安装不完整，缺少 $f" }
 }
@@ -118,3 +118,4 @@ Write-Host "======== 安装完成 ========"
 Write-Host "程序目录: $TargetDir"
 Write-Host "启动: 双击桌面“linux-cpu温度”，或开始菜单“启动linux-cpu温度”"
 Write-Host "退出: 右键托盘图标→退出，或开始菜单“退出linux-cpu温度”"
+Write-Host "卸载: 程序目录内 uninstall.ps1（-DeleteFiles 连文件一起删）"

@@ -1,4 +1,4 @@
-# linux-cpu温度（fnos-temp）v1.0.0
+# linux-cpu温度（fnos-temp）v1.1.0
 
 Windows 系统托盘小工具：通过 SSH 读取**任意局域网 Linux 主机**的 CPU 温度，在系统托盘显示 16×16 数字图标（仿 Core Temp），悬停提示「linux-cpu 47°C」。
 
@@ -12,13 +12,12 @@ Windows 系统托盘小工具：通过 SSH 读取**任意局域网 Linux 主机*
 | `portable/` | **便携版**：复制即用，由 PowerShell 承载，无需编译，兼容 Smart App Control |
 | `installer/` | **安装版**：运行 `install.ps1` 一键安装到 `%LOCALAPPDATA%\Programs\FnosTempOverlay`，自动建桌面/开始菜单快捷方式、设开机自启 |
 | `standalone-exe/` | **独立 exe 版**：编译好的 .NET Framework 程序，要求目标机**未开启** Smart App Control（否则未签名 exe 会被拦截） |
-| `skill/` | **豆包技能 `fnos-temp-installer`**：对豆包说「在本机安装 linux-cpu温度工具」，即可自动一键安装 |
+| `skill/` | **WorkBuddy 技能 `linux-cpu-temp`**：在 WorkBuddy 对话中说「帮我安装 linux-cpu温度工具」，即可自动一键安装（亦可上架 WorkBuddy 技能市场） |
 | `ubuntu/` | **Ubuntu GNOME 版**：顶部状态栏显示任意 SSH 主机 CPU 温度（扩展 `linux-temp@txh`），含安装版 + 便携版，详见 `ubuntu/README.md` |
 
 ## 快速开始
 
 **便携版**：把 `portable/` 整体拷到目标机，双击 `启动linux-cpu温度.vbs`，托盘出现数字后双击数字即可改设置。
-
 **安装版**：
 ```powershell
 powershell -ExecutionPolicy Bypass -File installer\install.ps1
@@ -27,7 +26,7 @@ powershell -ExecutionPolicy Bypass -File installer\install.ps1
 
 **独立 exe 版**：`standalone-exe/` 整体拷到未开 SAC 的 Windows 11，双击 `FnosTempOverlay.exe`。
 
-**豆包技能**：把 `skill/` 目录放到豆包的 `.user_skills/` 下，即可通过对话触发安装。
+**WorkBuddy 技能**：把 `skill/` 目录拷到 `~/.workbuddy/skills/linux-cpu-temp/`，即可在对话中触发安装；或打包 zip 上架技能市场（见下文）。
 
 **Ubuntu GNOME 版**：见 `ubuntu/README.md`（`cd ubuntu/installer && ./install.sh` 一键安装到顶部状态栏）。
 
@@ -61,6 +60,24 @@ SSH 到目标机执行命令，按以下优先级取 CPU 温度（返回毫摄�
   ```bat
   csc /target:winexe /platform:anycpu /optimize+ /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Security.dll /r:Renci.SshNet.dll FnOsTempOverlay.cs
   ```
+
+## 更新日志
+
+### v1.1.0
+
+- 默认刷新间隔 2s → 10s（温度变化缓慢，低频轮询更省资源；设置中仍可调 1–60 秒）；
+- `app.log` 增加 512KB 轮转，不再无限增长；
+- 托盘右键菜单新增「立即刷新」，强制重建 SSH 连接并立即读温；
+- 连接失败时托盘悬停提示「连接失败，等待重试」，便于排障；
+- 技能版适配 WorkBuddy 技能规范（`agent_created: true`、版本号、触发词），新增 `uninstall.ps1` 卸载脚本并纳入安装清单；
+- 各变体（portable / installer / standalone-exe / skill）源码同步。
+
+## 上架 WorkBuddy 技能市场
+
+1. `skill/` 目录即技能包源（SKILL.md + scripts/ + assets/），用 skill-creator 打包为 zip；
+2. 访问开放平台 `open.workbuddy.cn`，注册并完成开发者认证（个人即可）；
+3. 在「技能发布管理」上传 zip，填写名称、简介、分类，提交审核（一般 1–3 个工作日）；
+4. 审核通过后发布，用户即可在 WorkBuddy 技能市场搜索安装；如需收费，需先有 ≥1 个审核通过的免费技能再开通收款账户。
 
 ## 说明
 
