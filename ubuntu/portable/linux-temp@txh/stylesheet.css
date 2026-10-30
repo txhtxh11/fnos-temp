@@ -1,0 +1,34 @@
+.fnos-dialog {
+  background-color: #30343b;
+  border: 1px solid #4a4f57;
+  border-radius: 12px;
+  padding: 18px;
+  spacing: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.fnos-title {
+  font-size: 15pt;
+  font-weight: bold;
+  color: #fff;
+}
+.fnos-brand {
+  width: 100%;
+  spacing: 16px;
+}
+.fnos-brand-right {
+  text-align: right;
+}
+.fnos-hint {
+  font-size: 9.5pt;
+  color: #aab0b8;
+}
+.fnos-label {
+  width: 150px;
+  text-align: left;
+  color: #dfe3e8;
+}
+.fnos-entry {
+  width: 300px;
+  padding: 6px;
+  border-radius: 6px;
+}

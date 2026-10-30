@@ -13,6 +13,7 @@ Windows 系统托盘小工具：通过 SSH 读取**任意局域网 Linux 主机*
 | `installer/` | **安装版**：运行 `install.ps1` 一键安装到 `%LOCALAPPDATA%\Programs\FnosTempOverlay`，自动建桌面/开始菜单快捷方式、设开机自启 |
 | `standalone-exe/` | **独立 exe 版**：编译好的 .NET Framework 程序，要求目标机**未开启** Smart App Control（否则未签名 exe 会被拦截） |
 | `skill/` | **豆包技能 `fnos-temp-installer`**：对豆包说「在本机安装 linux-cpu温度工具」，即可自动一键安装 |
+| `ubuntu/` | **Ubuntu GNOME 版**：顶部状态栏显示任意 SSH 主机 CPU 温度（扩展 `linux-temp@txh`），含安装版 + 便携版，详见 `ubuntu/README.md` |
 
 ## 快速开始
 
@@ -27,6 +28,8 @@ powershell -ExecutionPolicy Bypass -File installer\install.ps1
 **独立 exe 版**：`standalone-exe/` 整体拷到未开 SAC 的 Windows 11，双击 `FnosTempOverlay.exe`。
 
 **豆包技能**：把 `skill/` 目录放到豆包的 `.user_skills/` 下，即可通过对话触发安装。
+
+**Ubuntu GNOME 版**：见 `ubuntu/README.md`（`cd ubuntu/installer && ./install.sh` 一键安装到顶部状态栏）。
 
 ## 温度读取逻辑
 
