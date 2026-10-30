@@ -3,3 +3,4 @@ fnos_temp_key
 
 # 运行时
 app.log
+*.log

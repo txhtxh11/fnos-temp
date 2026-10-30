@@ -1,6 +1,9 @@
-# 飞牛温度（fnos-temp）
+# linux-cpu温度（fnos-temp）v1.0.0
 
-Windows 系统托盘小工具：通过 SSH 读取 **飞牛 / 局域网 Linux** 的 CPU 温度，在系统托盘显示 16×16 数字图标（仿 Core Temp），悬停提示「飞牛 CPU 47°C」。
+Windows 系统托盘小工具：通过 SSH 读取**任意局域网 Linux 主机**的 CPU 温度，在系统托盘显示 16×16 数字图标（仿 Core Temp），悬停提示「linux-cpu 47°C」。
+
+- **通用工具**：不内置任何主机、用户名、密码或密钥；安装后双击托盘数字打开设置，填写目标主机信息即可。
+- 名称：**linux-cpu温度**；版本：**v1.0.0**；品牌标识：TXH。
 
 ## 版本
 
@@ -9,11 +12,11 @@ Windows 系统托盘小工具：通过 SSH 读取 **飞牛 / 局域网 Linux** �
 | `portable/` | **便携版**：复制即用，由 PowerShell 承载，无需编译，兼容 Smart App Control |
 | `installer/` | **安装版**：运行 `install.ps1` 一键安装到 `%LOCALAPPDATA%\Programs\FnosTempOverlay`，自动建桌面/开始菜单快捷方式、设开机自启 |
 | `standalone-exe/` | **独立 exe 版**：编译好的 .NET Framework 程序，要求目标机**未开启** Smart App Control（否则未签名 exe 会被拦截） |
-| `skill/` | **豆包技能 `fnos-temp-installer`**：对豆包说「在本机安装飞牛温度工具」，即可自动一键安装 |
+| `skill/` | **豆包技能 `fnos-temp-installer`**：对豆包说「在本机安装 linux-cpu温度工具」，即可自动一键安装 |
 
 ## 快速开始
 
-**便携版**：把 `portable/` 整体拷到目标机，双击 `启动飞牛温度.vbs`，托盘出现数字后双击数字即可改设置。
+**便携版**：把 `portable/` 整体拷到目标机，双击 `启动linux-cpu温度.vbs`，托盘出现数字后双击数字即可改设置。
 
 **安装版**：
 ```powershell
@@ -33,13 +36,20 @@ SSH 到目标机执行命令，按以下优先级取 CPU 温度（返回毫摄�
 2. `/sys/class/hwmon` 中 name 为 `coretemp` / `k10temp` / `zenpower`，取所有核温度最大值（≈ Package 温度）；
 3. 回退：所有 thermal_zone 的最大值。
 
-## 密钥说明
+## 配置与认证
 
-> ⚠️ **本仓库不包含 SSH 私钥**（`fnos_temp_key` 已被移除），请勿期待仓库内有可直接使用的密钥。
+> ⚠️ **本工具为通用版**：不内置任何主机、用户名、密码或密钥，仓库不包含 SSH 私钥。
 
-- 默认认证方式为 **ed25519 密钥**（本机私有文件 `fnos_temp_key`，已在用户自己的飞牛 `t` 用户上配置过）。
-- 部署到你自己的飞牛：把 `fnos_temp_key.pub` 追加到 `~/.ssh/authorized_keys`，并把私钥文件命名为 `fnos_temp_key` 放到程序目录；或直接改用密码认证（在设置窗口中填密码）。
-- `config.ini` 中 `KeyPath=fnos_temp_key` 即指向该私钥文件。
+双击托盘数字打开设置窗口，填写：
+
+- **主机 IP/域名**：要读取温度的目标机
+- **SSH 用户名**
+- **端口**：默认 22
+- **认证**：密钥文件路径（ed25519/rsa 私钥）或 **密码**（二选一，均可留空）
+- **刷新间隔（秒）**
+
+留空且未填主机时，托盘显示 `--`。密码使用当前 Windows 用户的 DPAPI 加密保存。
+若要读取的目标机在另一台 Linux 上，请把目标机的私钥放到程序目录，或在设置中改用密码认证。
 
 ## 构建
 
@@ -51,9 +61,9 @@ SSH 到目标机执行命令，按以下优先级取 CPU 温度（返回毫摄�
 
 ## 说明
 
-- 进程由 `powershell.exe` 承载（本机启用了 Smart App Control），故系统托盘显示名为「Windows PowerShell」；托盘图标提示文字为「飞牛 CPU 47°C」。
+- 进程由 `powershell.exe` 承载（本机启用了 Smart App Control），故系统托盘显示名为「Windows PowerShell」；托盘图标提示文字为「linux-cpu 47°C」。
+- 设置窗口标题「linux-cpu温度设置」，窗口顶部品牌行：左侧 `linux-cpu温度 v1.0.0`，右侧 `TXH`。
 - 已修复：设置窗口「端口」输入框被标签遮挡的布局问题（三版源码已同步）。
-- 密码使用当前 Windows 用户的 DPAPI 加密存储。
 
 ## License
 

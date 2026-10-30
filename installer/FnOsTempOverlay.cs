@@ -75,9 +75,9 @@ namespace FnOsTempTray
     {
         public string Host = "";
         public int Port = 22;
-        public string User = "t";
+        public string User = "";
         public string Auth = "key";
-        public string KeyPath = "fnos_temp_key";
+        public string KeyPath = "";
         public string PasswordEnc = "";
         public int IntervalSeconds = 2;
         public bool ShowTrayIcon = true;
@@ -163,7 +163,7 @@ namespace FnOsTempTray
             {
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.Startup),
-                    "飞牛温度.vbs");
+                    "linux-cpu温度.vbs");
             }
         }
 
@@ -332,7 +332,7 @@ done
             _icon = CreateIcon("--");
             _notify = new NotifyIcon();
             _notify.Icon = _icon;
-            _notify.Text = "飞牛 CPU 温度";
+            _notify.Text = "linux-cpu温度 v1.0.0";
             _notify.Visible = _config.ShowTrayIcon;
             _notify.DoubleClick += delegate { OpenSettings(); };
 
@@ -358,12 +358,12 @@ done
             if (t >= 0 && t != _last)
             {
                 _last = t;
-                ReplaceIcon(t.ToString(CultureInfo.InvariantCulture), "飞牛 CPU " + t + "°C");
+                ReplaceIcon(t.ToString(CultureInfo.InvariantCulture), "linux-cpu " + t + "°C");
             }
             else if (t < 0 && _last != -2)
             {
                 _last = -2;
-                ReplaceIcon("--", "飞牛 CPU 温度");
+                ReplaceIcon("--", "linux-cpu温度");
             }
         }
 
@@ -477,32 +477,49 @@ done
         {
             _config = config;
 
-            Text = "飞牛温度设置";
+            Text = "linux-cpu温度设置";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen;
             MaximizeBox = false;
             MinimizeBox = false;
             TopMost = true;
-            ClientSize = new Size(500, 440);
+            ClientSize = new Size(500, 470);
             Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular, GraphicsUnit.Point);
 
-            AddLabel("主机", 20, 23);
-            _host = AddText(config.Host, 100, 20, 180);
-            AddLabel("端口", 300, 23);
+            // 品牌行：左 名称+版本，右 TXH
+            var brandLeft = new Label();
+            brandLeft.Text = "linux-cpu温度 v1.0.0";
+            brandLeft.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold, GraphicsUnit.Point);
+            brandLeft.AutoSize = true;
+            brandLeft.Location = new Point(20, 10);
+            Controls.Add(brandLeft);
+
+            var brandRight = new Label();
+            brandRight.Text = "TXH";
+            brandRight.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold, GraphicsUnit.Point);
+            brandRight.TextAlign = ContentAlignment.MiddleRight;
+            brandRight.Size = new Size(40, 26);
+            brandRight.Location = new Point(440, 8);
+            brandRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            Controls.Add(brandRight);
+
+            AddLabel("主机", 20, 53);
+            _host = AddText(config.Host, 100, 50, 180);
+            AddLabel("端口", 300, 53);
             _port = new NumericUpDown();
             _port.Minimum = 1;
             _port.Maximum = 65535;
             _port.Value = config.Port;
-            _port.Location = new Point(395, 20);
+            _port.Location = new Point(395, 50);
             _port.Size = new Size(70, 25);
             Controls.Add(_port);
 
-            AddLabel("用户名", 20, 58);
-            _user = AddText(config.User, 100, 55, 240);
+            AddLabel("用户名", 20, 88);
+            _user = AddText(config.User, 100, 85, 240);
 
             var grp = new GroupBox();
             grp.Text = "SSH 认证";
-            grp.Location = new Point(20, 90);
+            grp.Location = new Point(20, 120);
             grp.Size = new Size(460, 130);
             Controls.Add(grp);
 
@@ -551,18 +568,18 @@ done
             _rbPassword.CheckedChanged += delegate { UpdateAuth(); };
             UpdateAuth();
 
-            AddLabel("刷新间隔(秒)", 20, 235);
+            AddLabel("刷新间隔(秒)", 20, 265);
             _interval = new NumericUpDown();
             _interval.Minimum = 1;
             _interval.Maximum = 60;
             _interval.Value = config.IntervalSeconds;
-            _interval.Location = new Point(130, 232);
+            _interval.Location = new Point(130, 262);
             _interval.Size = new Size(60, 25);
             Controls.Add(_interval);
 
             var btnTray = new Button();
             btnTray.Text = "托盘设置";
-            btnTray.Location = new Point(380, 229);
+            btnTray.Location = new Point(380, 259);
             btnTray.Size = new Size(100, 28);
             btnTray.Click += delegate
             {
@@ -573,55 +590,55 @@ done
             _autostart = new CheckBox();
             _autostart.Text = "随系统启动";
             _autostart.Checked = Autostart.IsEnabled();
-            _autostart.Location = new Point(20, 265);
+            _autostart.Location = new Point(20, 295);
             _autostart.Size = new Size(160, 24);
             Controls.Add(_autostart);
 
             var hideNote = new Label();
             hideNote.Text = "显示/隐藏图标：托盘设置 → 其他系统托盘图标";
             hideNote.ForeColor = Color.Gray;
-            hideNote.Location = new Point(220, 265);
+            hideNote.Location = new Point(220, 295);
             hideNote.Size = new Size(260, 24);
             Controls.Add(hideNote);
 
             var support = new Label();
             support.Text = "支持任意 Linux：读取 /sys/class/thermal 或 hwmon（coretemp / k10temp / zenpower）";
             support.ForeColor = Color.Gray;
-            support.Location = new Point(20, 295);
+            support.Location = new Point(20, 325);
             support.Size = new Size(460, 22);
             Controls.Add(support);
 
             var btnTest = new Button();
             btnTest.Text = "测试连接";
-            btnTest.Location = new Point(20, 330);
+            btnTest.Location = new Point(20, 360);
             btnTest.Size = new Size(100, 32);
             btnTest.Click += delegate { TestConnection(); };
             Controls.Add(btnTest);
 
             var btnSave = new Button();
             btnSave.Text = "保存";
-            btnSave.Location = new Point(140, 330);
+            btnSave.Location = new Point(140, 360);
             btnSave.Size = new Size(100, 32);
             btnSave.Click += delegate { SaveSettings(); };
             Controls.Add(btnSave);
 
             var btnCancel = new Button();
             btnCancel.Text = "取消";
-            btnCancel.Location = new Point(260, 330);
+            btnCancel.Location = new Point(260, 360);
             btnCancel.Size = new Size(100, 32);
             btnCancel.Click += delegate { Close(); };
             Controls.Add(btnCancel);
 
             var btnExit = new Button();
             btnExit.Text = "退出程序";
-            btnExit.Location = new Point(380, 330);
+            btnExit.Location = new Point(380, 360);
             btnExit.Size = new Size(100, 32);
             btnExit.Click += delegate { Application.Exit(); };
             Controls.Add(btnExit);
 
             _status = new Label();
             _status.ForeColor = Color.Gray;
-            _status.Location = new Point(20, 380);
+            _status.Location = new Point(20, 410);
             _status.Size = new Size(460, 24);
             Controls.Add(_status);
 
@@ -673,7 +690,7 @@ done
             string user = _user.Text.Trim();
             if (host.Length == 0 || user.Length == 0)
             {
-                MessageBox.Show(this, "主机和用户名不能为空。", "飞牛温度设置");
+                MessageBox.Show(this, "主机和用户名不能为空。", "linux-cpu温度设置");
                 return false;
             }
             if (_rbKey.Checked)
@@ -681,13 +698,13 @@ done
                 string key = _keyPath.Text.Trim();
                 if (key.Length == 0 || !File.Exists(key))
                 {
-                    MessageBox.Show(this, "密钥文件不存在。", "飞牛温度设置");
+                    MessageBox.Show(this, "密钥文件不存在。", "linux-cpu温度设置");
                     return false;
                 }
             }
             else if (_password.Text.Length == 0 && _config.PasswordEnc.Length == 0)
             {
-                MessageBox.Show(this, "请输入 SSH 密码。", "飞牛温度设置");
+                MessageBox.Show(this, "请输入 SSH 密码。", "linux-cpu温度设置");
                 return false;
             }
 
@@ -713,7 +730,7 @@ done
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "保存失败: " + ex.Message, "飞牛温度设置");
+                MessageBox.Show(this, "保存失败: " + ex.Message, "linux-cpu温度设置");
             }
         }
 
