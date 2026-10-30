@@ -1,0 +1,5 @@
+# SSH 私钥，绝不上传
+fnos_temp_key
+
+# 运行时
+app.log
