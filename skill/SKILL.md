@@ -1,7 +1,10 @@
 ---
 name: linux-cpu-temp
-display_name: linux-cpu温度（局域网 Linux CPU 温度托盘）
+display_name: linux-cpu温度（局域网Linux温度托盘）
+display_name_en: linux-cpu Temperature Tray (LAN Linux Hosts)
 description: 在 Windows 电脑上一键安装"linux-cpu温度"系统托盘工具：通过 SSH 读取局域网内任意 Linux 主机（飞牛 fnOS、群晖、Ubuntu、Debian、CentOS 等）的 CPU 温度，在系统托盘显示黑色数字图标（仿 Core Temp），悬停提示"linux-cpu 47°C"。当用户要求安装/部署/重装该温度托盘工具、监控 NAS 或局域网 Linux 主机 CPU 温度、或在系统托盘显示远程主机温度时使用本技能；也支持配置修改与卸载。
+description_zh: 通过 SSH 读取局域网 Linux 主机（飞牛 fnOS、群晖、Ubuntu 等）的 CPU 温度，在 Windows 系统托盘显示实时数字图标，支持一键安装、开机自启、配置修改与卸载。
+description_en: Reads CPU temperature from any LAN Linux host (fnOS, Synology, Ubuntu, Debian, etc.) via SSH and shows a live numeric tray icon on Windows. Supports one-click install, autostart, configuration and uninstall.
 agent_created: true
 version: 1.1.0
 author: txhtxh11
