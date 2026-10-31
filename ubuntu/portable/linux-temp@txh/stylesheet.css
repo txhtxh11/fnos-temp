@@ -51,3 +51,34 @@
   background-color: #2f6fbf;
   color: #ffffff;
 }
+
+/* Ubuntu 系统设置风格：左导航 + 右侧分组表单 */
+.fnos-main {
+  spacing: 0;
+}
+.fnos-nav {
+  width: 170px;
+  spacing: 2px;
+  padding: 4px;
+}
+.fnos-nav-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #dfe3e8;
+  text-align: left;
+}
+.fnos-nav-btn:hover {
+  background-color: #3c4149;
+}
+.fnos-nav-btn-active {
+  background-color: #2f6fbf;
+  color: #ffffff;
+}
+.fnos-pages {
+  x-expand: true;
+}
+.fnos-page {
+  spacing: 12px;
+  padding: 6px;
+}
