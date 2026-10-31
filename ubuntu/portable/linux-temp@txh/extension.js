@@ -194,7 +194,7 @@ export default class LinuxTempExtension extends Extension {
         const showRemoteBlock = showRemote && remoteMain != null;
         let label = '';
         if (showLocalBlock && showRemoteBlock) {
-            label = `${localMain}\u00b0C · ${remoteMain}\u00b0C`;
+            label = `${localMain}\u00b0C   ${remoteMain}\u00b0C`;
         } else if (showLocalBlock) {
             label = `${localMain}\u00b0C`;
         } else if (showRemoteBlock) {
@@ -234,15 +234,19 @@ export default class LinuxTempExtension extends Extension {
         if (this._dialog) { this._dialog.close(); return; }
         const cfg = readConfig();
         const cores = readLocalCores();
+        const remoteCores = this._lastRemote || [];
         let localType = cfg.localType === 'max' ? 'max' : 'avg';
+        let remoteType = cfg.remoteType === 'max' ? 'max' : 'avg';
+        let showLocal = cfg.showLocal !== 'false';
+        let showRemote = cfg.showRemote !== 'false';
 
         const dialog = new ModalDialog.ModalDialog();
         dialog.connect('closed', () => { this._dialog = null; });
 
         const root = new St.BoxLayout({vertical: true, style_class: 'fnos-dialog'});
-        root.set_width(620);
+        root.set_width(920);
 
-        // 品牌行：左名称+版本，右 TXH
+        // 顶部品牌栏：左 名称+版本，右 TXH
         const brand = new St.BoxLayout({vertical: false, style_class: 'fnos-brand'});
         const brandL = new St.Label({text: 'linux-cpu温度 v1.0.0', style_class: 'fnos-title'});
         const brandR = new St.Label({text: 'TXH', style_class: 'fnos-title fnos-brand-right'});
@@ -252,137 +256,96 @@ export default class LinuxTempExtension extends Extension {
         brand.add_child(brandR);
         root.add_child(brand);
 
-        // 主区：左导航 + 右侧页面
-        const mainRow = new St.BoxLayout({vertical: false, style_class: 'fnos-main'});
-        const navCol = new St.BoxLayout({vertical: true, style_class: 'fnos-nav'});
-        const pages = new St.BoxLayout({vertical: true, style_class: 'fnos-pages'});
+        const cols = new St.BoxLayout({vertical: false, style_class: 'fnos-cols'});
 
-        const pageNames = [];
-        const navBtns = {};
-        const pageActors = {};
-        const makePage = (name) => {
-            const navBtn = new St.Button({label: name, can_focus: true, style_class: 'fnos-nav-btn'});
-            navBtn.connect('clicked', () => switchPage(name));
-            navCol.add_child(navBtn);
-            navBtns[name] = navBtn;
-            pageNames.push(name);
-            const page = new St.BoxLayout({vertical: true, style_class: 'fnos-page'});
-            pages.add_child(page);
-            pageActors[name] = page;
-            return page;
+        const mkCol = (title) => {
+            const col = new St.BoxLayout({vertical: true, style_class: 'fnos-col'});
+            col.add_child(new St.Label({text: title, style_class: 'fnos-col-title'}));
+            return col;
         };
-        const switchPage = (name) => {
-            for (const n of pageNames) {
-                navBtns[n].set_style_class_name('fnos-nav-btn' + (n === name ? ' fnos-nav-btn-active' : ''));
-                pageActors[n].visible = (n === name);
-            }
-        };
-
-        // 表单行 helper：返回"标签+内容"横排容器，后续添加控件
-        const mkRow = (page, label) => {
+        const mkLabelRow = (col, label, widget) => {
             const row = new St.BoxLayout({vertical: false, style_class: 'fnos-row'});
             const lab = new St.Label({text: label, style_class: 'fnos-label'});
             lab.y_align = Clutter.ActorAlign.CENTER;
             row.add_child(lab);
-            page.add_child(row);
-            return row;
+            row.add_child(widget);
+            col.add_child(row);
+        };
+        const mkEntry = (col, label, val) => {
+            const entry = new St.Entry({text: val, can_focus: true, style_class: 'fnos-entry'});
+            entry.x_expand = true;
+            mkLabelRow(col, label, entry);
+            return entry;
+        };
+        const mkSwitch = (col, label, init) => {
+            const sw = new St.Button({label: init ? '开' : '关', can_focus: true,
+                                      style_class: 'fnos-switch ' + (init ? 'fnos-switch-on' : 'fnos-switch-off')});
+            let st = init;
+            sw.connect('clicked', () => {
+                st = !st;
+                sw.set_label(st ? '开' : '关');
+                sw.set_style_class_name('fnos-switch ' + (st ? 'fnos-switch-on' : 'fnos-switch-off'));
+            });
+            mkLabelRow(col, label, sw);
+            return () => st;
+        };
+        const mkType = (col, label, onPick) => {
+            const box = new St.BoxLayout({vertical: false, style_class: 'fnos-type'});
+            const btnAvg = new St.Button({label: '平均温度', can_focus: true, style_class: 'fnos-btn'});
+            const btnMax = new St.Button({label: '最高温度', can_focus: true, style_class: 'fnos-btn'});
+            btnAvg.connect('clicked', () => onPick('avg'));
+            btnMax.connect('clicked', () => onPick('max'));
+            box.add_child(btnAvg);
+            box.add_child(btnMax);
+            mkLabelRow(col, label, box);
+            return (t) => {
+                btnAvg.set_style_class_name('fnos-btn' + (t === 'avg' ? ' fnos-btn-active' : ''));
+                btnMax.set_style_class_name('fnos-btn' + (t === 'max' ? ' fnos-btn-active' : ''));
+            };
         };
 
-        // ---- 本机温度页 ----
-        const pageLocal = makePage('本机温度');
-        pageLocal.add_child(new St.Label({text: '本机 CPU 温度', style_class: 'fnos-section-title'}));
-        const hintLocal = new St.Label({text: '直接读取本机 coretemp，无需 lm-sensors，可替代 Freon', style_class: 'fnos-hint'});
-        pageLocal.add_child(hintLocal);
+        // 列1：显示选项
+        const colD = mkCol('显示选项');
+        cols.add_child(colD);
+        const eLocalIv = mkEntry(colD, '本机刷新间隔(秒)', cfg.localInterval);
+        const eRemoteIv = mkEntry(colD, '远程刷新间隔(秒)', cfg.remoteInterval);
+        const setLocalType = mkType(colD, '本机温度类型', (t) => { localType = t; });
+        setLocalType(localType);
+        const setRemoteType = mkType(colD, '远程温度类型', (t) => { remoteType = t; });
+        setRemoteType(remoteType);
 
-        const rowShow = mkRow(pageLocal, '显示本机温度');
-        let showLocal = cfg.showLocal !== 'false';
-        const swLocal = new St.Button({label: showLocal ? '开' : '关', can_focus: true,
-                                       style_class: 'fnos-switch ' + (showLocal ? 'fnos-switch-on' : 'fnos-switch-off')});
-        swLocal.connect('clicked', () => {
-            showLocal = !showLocal;
-            swLocal.set_label(showLocal ? '开' : '关');
-            swLocal.set_style_class_name('fnos-switch ' + (showLocal ? 'fnos-switch-on' : 'fnos-switch-off'));
-        });
-        rowShow.add_child(swLocal);
+        // 列2：传感器提供程序（远程 SSH 主机）
+        const colP = mkCol('传感器提供程序');
+        cols.add_child(colP);
+        colP.add_child(new St.Label({text: '远程 SSH 主机', style_class: 'fnos-sub-title'}));
+        const eHost = mkEntry(colP, '主机 IP/域名', cfg.host);
+        const eUser = mkEntry(colP, 'SSH 用户名', cfg.user);
+        const ePort = mkEntry(colP, '端口', cfg.port);
+        const eKey = mkEntry(colP, '密钥路径(可选)', cfg.key);
+        const ePass = mkEntry(colP, '密码(可选)', cfg.password);
 
-        const rowType = mkRow(pageLocal, '温度类型');
-        const btnAvg = new St.Button({label: '平均温度', can_focus: true, style_class: 'fnos-btn'});
-        const btnMax = new St.Button({label: '最高温度', can_focus: true, style_class: 'fnos-btn'});
-        const refreshType = () => {
-            btnAvg.set_style_class_name('fnos-btn' + (localType === 'avg' ? ' fnos-btn-active' : ''));
-            btnMax.set_style_class_name('fnos-btn' + (localType === 'max' ? ' fnos-btn-active' : ''));
-        };
-        refreshType();
-        btnAvg.connect('clicked', () => { localType = 'avg'; refreshType(); });
-        btnMax.connect('clicked', () => { localType = 'max'; refreshType(); });
-        rowType.add_child(btnAvg);
-        rowType.add_child(btnMax);
-
-        const rowCores = mkRow(pageLocal, '当前各核温度');
+        // 列3：显示传感器
+        const colS = mkCol('显示传感器');
+        cols.add_child(colS);
+        const getShowLocal = mkSwitch(colS, '本机温度', showLocal);
+        const getShowRemote = mkSwitch(colS, '远程温度', showRemote);
+        colS.add_child(new St.Label({text: '当前各核温度', style_class: 'fnos-sub-title'}));
         const coreLines = [];
         for (let i = 0; i < cores.length; i += 4)
             coreLines.push(cores.slice(i, i + 4).map((t, j) => `Core${i + j} ${t}\u00b0C`).join('  '));
-        const coresLab = new St.Label({text: cores.length ? coreLines.join('\n') : '（未读到 coretemp）', style_class: 'fnos-hint'});
-        coresLab.x_expand = true;
-        rowCores.add_child(coresLab);
+        const localLab = new St.Label({text: cores.length ? coreLines.join('\n') : '（未读到 coretemp）', style_class: 'fnos-hint'});
+        localLab.x_expand = true;
+        colS.add_child(localLab);
+        if (remoteCores.length) {
+            const rLines = [];
+            for (let i = 0; i < remoteCores.length; i += 4)
+                rLines.push(remoteCores.slice(i, i + 4).map((t, j) => `Core${i + j} ${t}\u00b0C`).join('  '));
+            const remoteLab = new St.Label({text: rLines.join('\n'), style_class: 'fnos-hint'});
+            remoteLab.x_expand = true;
+            colS.add_child(remoteLab);
+        }
 
-        const mkEntry = (page, label, val) => {
-            const row = mkRow(page, label);
-            const entry = new St.Entry({text: val, can_focus: true, style_class: 'fnos-entry'});
-            entry.x_expand = true;
-            row.add_child(entry);
-            return entry;
-        };
-        const eLocalIv = mkEntry(pageLocal, '本机刷新间隔(秒)', cfg.localInterval);
-
-        // ---- 远程主机页 ----
-        const pageRemote = makePage('远程主机');
-        pageRemote.add_child(new St.Label({text: '远程 SSH 主机（可选）', style_class: 'fnos-section-title'}));
-        const hintRemote = new St.Label({text: '通过 SSH 读取局域网内 Linux 主机的 CPU 温度', style_class: 'fnos-hint'});
-        pageRemote.add_child(hintRemote);
-
-        const rowShowR = mkRow(pageRemote, '显示远程温度');
-        let showRemote = cfg.showRemote !== 'false';
-        const swRemote = new St.Button({label: showRemote ? '开' : '关', can_focus: true,
-                                        style_class: 'fnos-switch ' + (showRemote ? 'fnos-switch-on' : 'fnos-switch-off')});
-        swRemote.connect('clicked', () => {
-            showRemote = !showRemote;
-            swRemote.set_label(showRemote ? '开' : '关');
-            swRemote.set_style_class_name('fnos-switch ' + (showRemote ? 'fnos-switch-on' : 'fnos-switch-off'));
-        });
-        rowShowR.add_child(swRemote);
-
-        let remoteType = cfg.remoteType === 'max' ? 'max' : 'avg';
-        const rowTypeR = mkRow(pageRemote, '温度类型');
-        const btnAvgR = new St.Button({label: '平均温度', can_focus: true, style_class: 'fnos-btn'});
-        const btnMaxR = new St.Button({label: '最高温度', can_focus: true, style_class: 'fnos-btn'});
-        const refreshTypeR = () => {
-            btnAvgR.set_style_class_name('fnos-btn' + (remoteType === 'avg' ? ' fnos-btn-active' : ''));
-            btnMaxR.set_style_class_name('fnos-btn' + (remoteType === 'max' ? ' fnos-btn-active' : ''));
-        };
-        refreshTypeR();
-        btnAvgR.connect('clicked', () => { remoteType = 'avg'; refreshTypeR(); });
-        btnMaxR.connect('clicked', () => { remoteType = 'max'; refreshTypeR(); });
-        rowTypeR.add_child(btnAvgR);
-        rowTypeR.add_child(btnMaxR);
-
-        const eHost = mkEntry(pageRemote, '远程主机 IP/域名', cfg.host);
-        const eUser = mkEntry(pageRemote, 'SSH 用户名', cfg.user);
-        const ePort = mkEntry(pageRemote, '端口', cfg.port);
-        const eKey = mkEntry(pageRemote, '密钥文件路径(可选)', cfg.key);
-        const ePass = mkEntry(pageRemote, '密码(可选)', cfg.password);
-        const eRemoteIv = mkEntry(pageRemote, '远程刷新间隔(秒)', cfg.remoteInterval);
-
-        // ---- 关于页 ----
-        const pageAbout = makePage('关于');
-        pageAbout.add_child(new St.Label({text: 'linux-cpu温度', style_class: 'fnos-section-title'}));
-        pageAbout.add_child(new St.Label({text: '版本  v1.0.0', style_class: 'fnos-hint'}));
-        pageAbout.add_child(new St.Label({text: '作者  TXH', style_class: 'fnos-hint'}));
-        pageAbout.add_child(new St.Label({text: '本机温度开箱即用；远程 SSH 主机温度可选配置', style_class: 'fnos-hint'}));
-
-        mainRow.add_child(navCol);
-        mainRow.add_child(pages);
-        root.add_child(mainRow);
+        root.add_child(cols);
 
         dialog.contentLayout.add_child(root);
         dialog.setButtons([
@@ -397,9 +360,9 @@ export default class LinuxTempExtension extends Extension {
                     interval: cfg.interval || '5',
                     localInterval: eLocalIv.get_text().trim() || '5',
                     remoteInterval: eRemoteIv.get_text().trim() || '5',
-                    showLocal: showLocal ? 'true' : 'false',
+                    showLocal: getShowLocal() ? 'true' : 'false',
                     localType,
-                    showRemote: showRemote ? 'true' : 'false',
+                    showRemote: getShowRemote() ? 'true' : 'false',
                     remoteType,
                 });
                 this._restartTimers();
@@ -409,7 +372,6 @@ export default class LinuxTempExtension extends Extension {
             }},
         ]);
         this._dialog = dialog;
-        switchPage('本机温度');
         dialog.open();
     }
 
