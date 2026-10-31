@@ -18,7 +18,7 @@ KEY=${KEY/\~/$HOME}
 [ -z "$HOST" ] && { echo "NOCONFIG"; exit 1; }
 PORT=${PORT:-22}
 
-READ_CMD='max=0; for d in /sys/class/hwmon/hwmon*; do [ "$(cat $d/name 2>/dev/null)" = coretemp ] && for t in $d/temp*_input; do v=$(cat $t 2>/dev/null); [ -n "$v" ] && [ "$v" -gt "$max" ] && max=$v; done; done; echo $((max/1000))'
+READ_CMD='out=""; for d in /sys/class/hwmon/hwmon*; do [ "$(cat $d/name 2>/dev/null)" = coretemp ] && for t in $d/temp*_input; do v=$(cat $t 2>/dev/null); [ -n "$v" ] && [ "$v" -gt 0 ] && out="$out $((v/1000))"; done; done; echo ${out# }'
 
 if [ -n "$KEY" ] && [ -f "$KEY" ]; then
     VAL=$(ssh -i "$KEY" -p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$USER@$HOST" "$READ_CMD" 2>/dev/null)

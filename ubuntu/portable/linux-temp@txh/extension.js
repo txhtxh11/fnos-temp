@@ -14,7 +14,7 @@ const CONFIG_FILE = `${CONFIG_DIR}/config`;
 
 function readConfig() {
     const c = {host: '', user: '', port: '22', key: '', password: '', interval: '5',
-               localInterval: '', remoteInterval: '', showLocal: 'true', localType: 'avg'};
+               localInterval: '', remoteInterval: '', showLocal: 'true', localType: 'avg', showRemote: 'true', remoteType: 'avg'};
     try {
         const [ok, contents] = GLib.file_get_contents(CONFIG_FILE);
         if (ok && contents) {
@@ -34,6 +34,8 @@ function readConfig() {
                 else if (k === 'REMOTE_INTERVAL') c.remoteInterval = v;
                 else if (k === 'SHOW_LOCAL') c.showLocal = v || 'true';
                 else if (k === 'LOCAL_TEMP_TYPE') c.localType = v === 'max' ? 'max' : 'avg';
+                else if (k === 'SHOW_REMOTE') c.showRemote = v || 'true';
+                else if (k === 'REMOTE_TEMP_TYPE') c.remoteType = v === 'max' ? 'max' : 'avg';
             }
         }
     } catch (e) { log(`linux-temp: readConfig err ${e}`); }
@@ -56,6 +58,8 @@ function writeConfig(c) {
             `REMOTE_INTERVAL=${c.remoteInterval || c.interval || '5'}`,
             `SHOW_LOCAL=${c.showLocal === 'false' ? 'false' : 'true'}`,
             `LOCAL_TEMP_TYPE=${c.localType === 'max' ? 'max' : 'avg'}`,
+            `SHOW_REMOTE=${c.showRemote === 'false' ? 'false' : 'true'}`,
+            `REMOTE_TEMP_TYPE=${c.remoteType === 'max' ? 'max' : 'avg'}`,
         ].join('\n') + '\n';
         GLib.file_set_contents(CONFIG_FILE, new TextEncoder().encode(text));
         GLib.chmod(CONFIG_FILE, 0o600);
@@ -147,12 +151,9 @@ export default class LinuxTempExtension extends Extension {
             try {
                 const [, out] = p.communicate_utf8_finish(res);
                 const s = (out || '').trim();
-                if (/^[0-9]+$/.test(s)) {
-                    const v = parseInt(s, 10);
-                    cb(v > 0 ? v : null);
-                } else {
-                    cb(null);
-                }
+                const parts = s.split(/\s+/).map(x => parseInt(x, 10))
+                    .filter(v => !Number.isNaN(v) && v > 0);
+                cb(parts.length ? parts : null);
             } catch (e) { log(`linux-temp: remote err ${e}`); cb(null); }
         });
     }
@@ -174,37 +175,55 @@ export default class LinuxTempExtension extends Extension {
     _readRemoteNow() {
         const cfg = readConfig();
         if (!cfg.host) return;
-        this._readRemote(cfg, (rv) => { this._lastRemote = rv; this._updateDisplay(); });
+        this._readRemote(cfg, (cores) => { this._lastRemote = cores; this._updateDisplay(); });
     }
 
     _updateDisplay() {
         const cfg = readConfig();
+        const localCores = this._lastCores || [];
         const localMain = this._lastLocal;
-        const remoteVal = this._lastRemote;
-        const cores = this._lastCores || [];
-        const useLocal = cfg.showLocal !== 'false';
-        let main = null;
-        if (useLocal && localMain != null) main = localMain;
-        else if (remoteVal != null) main = remoteVal;
-        else if (localMain != null) main = localMain;
+        const remoteCores = this._lastRemote || [];
+        const showLocal = cfg.showLocal !== 'false';
+        const showRemote = cfg.showRemote !== 'false';
+        const avgOf = (a) => Math.round(a.reduce((x, y) => x + y, 0) / a.length);
+        const mainOf = (a, type) => (type === 'max' ? Math.max(...a) : avgOf(a));
+        const remoteMain = remoteCores.length ? mainOf(remoteCores, cfg.remoteType) : null;
 
-        if (main != null) {
-            this._label.set_text(`${main}\u00b0C`);
+        // 顶栏：本机/远程开关各自控制，都开就都显示
+        const showLocalBlock = showLocal && localMain != null;
+        const showRemoteBlock = showRemote && remoteMain != null;
+        let label = '';
+        if (showLocalBlock && showRemoteBlock) {
+            label = `${localMain}\u00b0C · ${remoteMain}\u00b0C`;
+        } else if (showLocalBlock) {
+            label = `${localMain}\u00b0C`;
+        } else if (showRemoteBlock) {
+            label = `${remoteMain}\u00b0C`;
         } else {
-            this._label.set_text(cfg.host ? '\u2013\u2013\u00b0C' : '未配置');
+            label = cfg.host ? '\u2013\u2013\u00b0C' : '未配置';
         }
+        this._label.set_text(label);
 
         const lines = [];
-        if (cores.length) {
-            const avg = Math.round(cores.reduce((a, b) => a + b, 0) / cores.length);
-            const max = Math.max(...cores);
-            const coreStr = cores.map((t, i) => `Core${i} ${t}\u00b0C`).join('  ·  ');
-            lines.push(`本机CPU: ${coreStr}`);
-            lines.push(`本机温度: 平均 ${avg}\u00b0C / 最高 ${max}\u00b0C`);
+        if (showLocalBlock) {
+            const lAvg = avgOf(localCores);
+            const lMax = Math.max(...localCores);
+            const lStr = localCores.map((t, i) => `Core${i} ${t}\u00b0C`).join('  ');
+            lines.push('本机CPU:');
+            lines.push(`  ${lStr}`);
+            lines.push(`本机: 平均 ${lAvg}\u00b0C / 最高 ${lMax}\u00b0C`);
         }
         if (cfg.host) {
-            if (remoteVal != null) lines.push(`远程 ${cfg.host}: ${remoteVal}\u00b0C`);
-            else lines.push(`远程 ${cfg.host}: 读取中…`);
+            if (showRemoteBlock) {
+                const rAvg = avgOf(remoteCores);
+                const rMax = Math.max(...remoteCores);
+                const rStr = remoteCores.map((t, i) => `Core${i} ${t}\u00b0C`).join('  ');
+                lines.push(`远程 ${cfg.host}:`);
+                lines.push(`  ${rStr}`);
+                lines.push(`远程: 平均 ${rAvg}\u00b0C / 最高 ${rMax}\u00b0C`);
+            } else if (showRemote) {
+                lines.push(`远程 ${cfg.host}: 读取中…`);
+            }
         }
         if (!lines.length) lines.push('未配置，点击图标设置');
         this._button.tooltip_text = lines.join('\n');
@@ -300,15 +319,17 @@ export default class LinuxTempExtension extends Extension {
         rowType.add_child(btnMax);
 
         const rowCores = mkRow(pageLocal, '当前各核温度');
-        const coresLab = new St.Label({text: cores.length
-            ? cores.map((t, i) => `Core${i} ${t}\u00b0C`).join('  ')
-            : '（未读到 coretemp）', style_class: 'fnos-hint'});
+        const coreLines = [];
+        for (let i = 0; i < cores.length; i += 4)
+            coreLines.push(cores.slice(i, i + 4).map((t, j) => `Core${i + j} ${t}\u00b0C`).join('  '));
+        const coresLab = new St.Label({text: cores.length ? coreLines.join('\n') : '（未读到 coretemp）', style_class: 'fnos-hint'});
+        coresLab.x_expand = true;
         rowCores.add_child(coresLab);
 
         const mkEntry = (page, label, val) => {
             const row = mkRow(page, label);
             const entry = new St.Entry({text: val, can_focus: true, style_class: 'fnos-entry'});
-            entry.set_width(300);
+            entry.x_expand = true;
             row.add_child(entry);
             return entry;
         };
@@ -319,6 +340,32 @@ export default class LinuxTempExtension extends Extension {
         pageRemote.add_child(new St.Label({text: '远程 SSH 主机（可选）', style_class: 'fnos-section-title'}));
         const hintRemote = new St.Label({text: '通过 SSH 读取局域网内 Linux 主机的 CPU 温度', style_class: 'fnos-hint'});
         pageRemote.add_child(hintRemote);
+
+        const rowShowR = mkRow(pageRemote, '显示远程温度');
+        let showRemote = cfg.showRemote !== 'false';
+        const swRemote = new St.Button({label: showRemote ? '开' : '关', can_focus: true,
+                                        style_class: 'fnos-switch ' + (showRemote ? 'fnos-switch-on' : 'fnos-switch-off')});
+        swRemote.connect('clicked', () => {
+            showRemote = !showRemote;
+            swRemote.set_label(showRemote ? '开' : '关');
+            swRemote.set_style_class_name('fnos-switch ' + (showRemote ? 'fnos-switch-on' : 'fnos-switch-off'));
+        });
+        rowShowR.add_child(swRemote);
+
+        let remoteType = cfg.remoteType === 'max' ? 'max' : 'avg';
+        const rowTypeR = mkRow(pageRemote, '温度类型');
+        const btnAvgR = new St.Button({label: '平均温度', can_focus: true, style_class: 'fnos-btn'});
+        const btnMaxR = new St.Button({label: '最高温度', can_focus: true, style_class: 'fnos-btn'});
+        const refreshTypeR = () => {
+            btnAvgR.set_style_class_name('fnos-btn' + (remoteType === 'avg' ? ' fnos-btn-active' : ''));
+            btnMaxR.set_style_class_name('fnos-btn' + (remoteType === 'max' ? ' fnos-btn-active' : ''));
+        };
+        refreshTypeR();
+        btnAvgR.connect('clicked', () => { remoteType = 'avg'; refreshTypeR(); });
+        btnMaxR.connect('clicked', () => { remoteType = 'max'; refreshTypeR(); });
+        rowTypeR.add_child(btnAvgR);
+        rowTypeR.add_child(btnMaxR);
+
         const eHost = mkEntry(pageRemote, '远程主机 IP/域名', cfg.host);
         const eUser = mkEntry(pageRemote, 'SSH 用户名', cfg.user);
         const ePort = mkEntry(pageRemote, '端口', cfg.port);
@@ -352,6 +399,8 @@ export default class LinuxTempExtension extends Extension {
                     remoteInterval: eRemoteIv.get_text().trim() || '5',
                     showLocal: showLocal ? 'true' : 'false',
                     localType,
+                    showRemote: showRemote ? 'true' : 'false',
+                    remoteType,
                 });
                 this._restartTimers();
                 this._readLocalNow();
