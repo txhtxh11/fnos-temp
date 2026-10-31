@@ -112,10 +112,10 @@ export default class LinuxTempExtension extends Extension {
         this._button.menu.addMenuItem(this._head);
         this._button.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._refreshItem = new PopupMenu.PopupMenuItem('刷新');
-        this._refreshItem.connect('activate', () => { this._readLocalNow(); this._readRemoteNow(); });
+        this._refreshActivateId = this._refreshItem.connect('activate', () => { this._readLocalNow(); this._readRemoteNow(); });
         this._button.menu.addMenuItem(this._refreshItem);
         this._settingsItem = new PopupMenu.PopupMenuItem('设置');
-        this._settingsItem.connect('activate', () => Main.extensionManager.openExtensionPrefs(this.metadata.uuid, ''));
+        this._settingsActivateId = this._settingsItem.connect('activate', () => Main.extensionManager.openExtensionPrefs(this.metadata.uuid, ''));
         this._button.menu.addMenuItem(this._settingsItem);
 
         const centerItem = (item) => {
@@ -127,7 +127,7 @@ export default class LinuxTempExtension extends Extension {
         centerItem(this._refreshItem);
         centerItem(this._settingsItem);
 
-        this._button.menu.connect('open-state-changed', (menu, open) => {
+        this._menuOpenId = this._button.menu.connect('open-state-changed', (menu, open) => {
             if (open) this._updateHead();
         });
 
@@ -481,10 +481,20 @@ export default class LinuxTempExtension extends Extension {
     }
 
     disable() {
+        // 先断开信号再销毁（EOG 审查：disconnect all signals）
+        if (this._menuOpenId) { this._button?.menu?.disconnect(this._menuOpenId); this._menuOpenId = null; }
+        if (this._refreshActivateId) { this._refreshItem?.disconnect(this._refreshActivateId); this._refreshActivateId = null; }
+        if (this._settingsActivateId) { this._settingsItem?.disconnect(this._settingsActivateId); this._settingsActivateId = null; }
         if (this._localTimer) { GLib.source_remove(this._localTimer); this._localTimer = null; }
         if (this._remoteTimer) { GLib.source_remove(this._remoteTimer); this._remoteTimer = null; }
         if (this._dialog) { this._dialog.close(); this._dialog = null; }
         this._button?.destroy();
+        // 释放 owned 引用（EOG 审查：release references with null）
         this._button = null;
+        this._box = null;
+        this._label = null;
+        this._head = null;
+        this._refreshItem = null;
+        this._settingsItem = null;
     }
 }
