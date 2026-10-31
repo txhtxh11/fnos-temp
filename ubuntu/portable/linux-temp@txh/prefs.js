@@ -1,4 +1,5 @@
 import Gtk from 'gi://Gtk';
+import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
@@ -71,6 +72,9 @@ export default class Prefs {
         const cfg = readConfig();
         const root = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 10,
                                    margin_top: 14, margin_bottom: 14, margin_start: 18, margin_end: 18 });
+        const brand = new Gtk.Label({ label: 'linux-cpu温度 v1.0.0 / TXH', halign: Gtk.Align.START, xalign: 0 });
+        brand.add_css_class('title-4');
+        root.append(brand);
         const cols = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 30 });
         root.append(cols);
 
@@ -141,6 +145,8 @@ export default class Prefs {
         });
         bar.append(bReset); bar.append(bSave);
         root.append(bar);
-        window.add(root);
+        const page = new Adw.PreferencesPage();
+        page.add(root);
+        window.add(page);
     }
 }
