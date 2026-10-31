@@ -116,3 +116,15 @@
 .fnos-close:hover {
   background-color: #e4e7ea;
 }
+.fnos-browse {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #c8cdd3;
+  background-color: #ffffff;
+  color: #222222;
+  text-align: left;
+}
+.fnos-browse:hover {
+  background-color: #e95420;
+  color: #ffffff;
+}

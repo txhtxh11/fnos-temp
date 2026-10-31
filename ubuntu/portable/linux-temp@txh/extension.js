@@ -360,25 +360,9 @@ export default class LinuxTempExtension extends Extension {
         keyLab.y_align = Clutter.ActorAlign.CENTER;
         const eKey = new St.Entry({text: cfg.key, can_focus: true, style_class: 'fnos-entry'});
         eKey.x_expand = true;
-        const btnBrowse = new St.Button({label: '浏览…', can_focus: true, style_class: 'fnos-btn'});
+        const btnBrowse = new St.Button({label: '浏览…', can_focus: true, style_class: 'fnos-browse'});
         btnBrowse.connect('clicked', () => {
-            // 用独立进程 zenity 弹文件选择，避免 Gtk 对话框在 Shell 主进程导致崩溃登出
-            try {
-                const { Gio } = imports.gi;
-                const proc = Gio.Subprocess.new(
-                    ['zenity', '--file-selection', '--title=选择 SSH 密钥文件'],
-                    Gio.SubprocessFlags.NONE
-                );
-                proc.wait_async(null, (p, res) => {
-                    try {
-                        if (p.get_exit_status() === 0) {
-                            const [out] = p.communicate_utf8(null, null);
-                            const f = (out || '').trim();
-                            if (f) eKey.set_text(f);
-                        }
-                    } catch (e) { log('browse wait err: ' + e); }
-                });
-            } catch (e) { log('browse spawn err: ' + e); }
+            this._openFilePicker(eKey.get_text(), (f) => eKey.set_text(f));
         });
         keyRow.add_child(keyLab);
         keyRow.add_child(eKey);
@@ -435,7 +419,58 @@ export default class LinuxTempExtension extends Extension {
             }},
         ]);
         this._dialog = dialog;
+        dialog.connect('closed', () => {
+            if (this._fileDialog) { this._fileDialog.close(); this._fileDialog = null; }
+            this._dialog = null;
+        });
         dialog.open();
+    }
+
+    _openFilePicker(initial, onPick) {
+        if (this._fileDialog) { this._fileDialog.close(); this._fileDialog = null; }
+        const dlg = new ModalDialog.ModalDialog();
+        dlg.contentLayout.style = 'spacing: 8px;';
+        const pathE = new St.Entry({text: (initial && GLib.path_is_absolute(initial)) ? initial : GLib.get_home_dir(), can_focus: true, style_class: 'fnos-entry'});
+        pathE.x_expand = true;
+        dlg.contentLayout.add_child(pathE);
+        const sc = new St.ScrollView({style_class: 'vfade'});
+        sc.height = 220;
+        const list = new St.BoxLayout({vertical: true});
+        sc.add_actor(list);
+        dlg.contentLayout.add_child(sc);
+        dlg.setButtons([
+            {label: '取消', action: () => { dlg.close(); this._fileDialog = null; }},
+            {label: '选择', action: () => { const p = pathE.get_text().trim(); if (p) onPick(p); dlg.close(); this._fileDialog = null; }},
+        ]);
+        const listDir = (p) => {
+            pathE.set_text(p);
+            list.destroy_all_children();
+            const parent = GLib.path_get_dirname(p);
+            if (parent !== p) {
+                const up = new St.Button({label: '.. 上一级', can_focus: true, style_class: 'fnos-browse'});
+                up.connect('clicked', () => listDir(parent));
+                list.add_child(up);
+            }
+            try {
+                const en = Gio.File.new_for_path(p).enumerate_children('standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
+                let info;
+                while ((info = en.next_file(null, null))) {
+                    const name = info.get_name();
+                    const isDir = info.get_file_type() === Gio.FileType.DIRECTORY;
+                    const full = p + '/' + name;
+                    const row = new St.Button({label: (isDir ? '\ud83d\udcc1 ' : '\ud83d\udcc4 ') + name, can_focus: true, style_class: 'fnos-browse'});
+                    row.connect('clicked', () => {
+                        if (isDir) listDir(full);
+                        else { onPick(full); dlg.close(); this._fileDialog = null; }
+                    });
+                    list.add_child(row);
+                }
+            } catch (e) { log('filepicker err ' + e); }
+        };
+        pathE.connect('activate', () => listDir(pathE.get_text().trim()));
+        listDir(pathE.text);
+        this._fileDialog = dlg;
+        dlg.open();
     }
 
     disable() {
