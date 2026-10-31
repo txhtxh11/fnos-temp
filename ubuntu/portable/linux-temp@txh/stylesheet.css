@@ -32,3 +32,22 @@
   padding: 6px;
   border-radius: 6px;
 }
+.fnos-section-title {
+  font-size: 11pt;
+  font-weight: bold;
+  color: #7fc7ff;
+  padding-top: 8px;
+}
+.fnos-row {
+  spacing: 10px;
+}
+.fnos-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background-color: #3c4149;
+  color: #e6e9ed;
+}
+.fnos-btn-active {
+  background-color: #2f6fbf;
+  color: #ffffff;
+}

@@ -1,10 +1,10 @@
 {
   "name": "linux-cpu温度",
-  "description": "在顶部状态栏显示任意 SSH 主机的 CPU 温度（按加载顺序自然排列，登录时无位置交换）。点击温度图标弹出菜单，在“设置…”中填写主机/用户/端口/密钥或密码，无需内置密钥，密钥可选。",
+  "description": "在顶部状态栏显示本机 CPU 温度（可选手均或最高），也可通过 SSH 显示任意远程主机温度；悬停提示与设置界面显示所有核温度（按加载顺序自然排列，登录时无位置交换）。点击温度图标弹出菜单，在“设置…”中配置。本机温度开箱即用，无需内置密钥，远程密钥可选。",
   "uuid": "linux-temp@txh",
   "url": "https://github.com/txhtxh11/fnos-temp",
   "shell-version": ["45", "46", "47", "48", "49", "50", "51"],
-  "version": 2,
+  "version": 3,
   "version-name": "v1.0.0",
   "stylesheet": "stylesheet.css"
 }
