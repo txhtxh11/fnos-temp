@@ -67,7 +67,7 @@ function mkSwitch(label, on) {
 }
 
 export default class Prefs {
-    buildPrefsWidget() {
+    fillPreferencesWindow(window) {
         const cfg = readConfig();
         const root = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 10,
                                    margin_top: 14, margin_bottom: 14, margin_start: 18, margin_end: 18 });
@@ -141,6 +141,6 @@ export default class Prefs {
         });
         bar.append(bReset); bar.append(bSave);
         root.append(bar);
-        return root;
+        window.set_child(root);
     }
 }

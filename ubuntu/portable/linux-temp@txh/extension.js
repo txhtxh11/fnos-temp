@@ -376,22 +376,6 @@ export default class LinuxTempExtension extends Extension {
         cols.add_child(colS);
         const getShowLocal = mkSwitch(colS, '本机温度', showLocal);
         const getShowRemote = mkSwitch(colS, '远程温度', showRemote);
-        colS.add_child(new St.Label({text: '本机各核温度', style_class: 'fnos-sub-title'}));
-        const coreLines = [];
-        for (let i = 0; i < cores.length; i += 3)
-            coreLines.push(cores.slice(i, i + 3).map((t, j) => `Core${i + j} ${t}\u00b0C`).join('  '));
-        const localLab = new St.Label({text: cores.length ? coreLines.join('\n') : '（未读到 coretemp）', style_class: 'fnos-hint'});
-        localLab.x_expand = true;
-        colS.add_child(localLab);
-        if (remoteCores.length) {
-            colS.add_child(new St.Label({text: `远程${cfg.host}各核温度`, style_class: 'fnos-sub-title'}));
-            const rLines = [];
-            for (let i = 0; i < remoteCores.length; i += 3)
-                rLines.push(remoteCores.slice(i, i + 3).map((t, j) => `Core${i + j} ${t}\u00b0C`).join('  '));
-            const remoteLab = new St.Label({text: rLines.join('\n'), style_class: 'fnos-hint'});
-            remoteLab.x_expand = true;
-            colS.add_child(remoteLab);
-        }
 
         root.add_child(cols);
         // 文件选择内嵌区：点浏览在设置对话框内展开（随设置一起显示/关闭，避免嵌套 modal 无响应）
@@ -402,7 +386,7 @@ export default class LinuxTempExtension extends Extension {
         const pScroll = new St.ScrollView({style_class: 'vfade'});
         pScroll.height = 160;
         const pList = new St.BoxLayout({vertical: true});
-        pScroll.add_actor(pList);
+        pScroll.add_child(pList);
         pickerBox.add_child(pPath);
         pickerBox.add_child(pScroll);
         root.add_child(pickerBox);
