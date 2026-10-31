@@ -19,14 +19,32 @@ ubuntu/
 │   ├── stylesheet.css
 │   ├── prefs.js                 # 设置对话框（Adw 上中下三段）
 │   └── linux-temp-read.sh       # 远程 SSH 读 CPU 温度 helper（读 config，密钥/密码可选）
-└── installer/install.sh         # 安装版（一键安装 + 启用）
+├── installer/install.sh         # 安装版（一键安装 + 启用）
+└── build_deb.py                 # 构建 .deb 安装包（纯 Python，Windows/Linux 均可运行）
 ```
 
 ---
 
 ## 安装部署
 
-### 方式一：安装版（推荐，一键）
+提供四种方式：**DEB 安装包（推荐）**、**一键脚本**、**便携版 zip**、**手动复制**。
+
+### 方式一：DEB 安装包（推荐，最省事）
+
+```bash
+sudo dpkg -i linux-cpu-temp_1.0.0_all.deb
+```
+
+或双击 `.deb` 用软件中心安装。安装后自动完成：扩展到系统级目录 `usr/share/gnome-shell/extensions/linux-temp@txh/`、生成配置模板、启用扩展。卸载时自动禁用。
+
+#### 构建 .deb（可自行重新打包）
+
+```bash
+cd ubuntu
+python3 build_deb.py     # 生成 linux-cpu-temp_1.0.0_all.deb
+```
+
+### 方式二：一键脚本（install.sh）
 
 ```bash
 cd ubuntu/installer
@@ -35,7 +53,17 @@ cd ubuntu/installer
 
 脚本自动完成：复制扩展到 `~/.local/share/gnome-shell/extensions/linux-temp@txh/`、生成空配置模板、启用扩展。完成后 `Alt+F2` 输入 `r` 回车（或注销重登）让扩展生效。
 
-### 方式二：便携版（手动）
+### 方式三：便携版 zip
+
+```bash
+# 解压后即 linux-temp@txh 扩展文件夹，放到用户扩展目录
+unzip linux-cpu温度-ubuntu便携版.zip -d ~/.local/share/gnome-shell/extensions/
+
+# 启用
+gnome-extensions enable linux-temp@txh
+```
+
+### 方式四：手动复制（便携版）
 
 ```bash
 # 1. 复制扩展目录
