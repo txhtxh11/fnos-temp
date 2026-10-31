@@ -532,7 +532,7 @@ done
             brandRight.Text = "TXH";
             brandRight.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold, GraphicsUnit.Point);
             brandRight.TextAlign = ContentAlignment.MiddleRight;
-            brandRight.Size = new Size(40, 26);
+            brandRight.AutoSize = true;
             brandRight.Location = new Point(440, 8);
             brandRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             Controls.Add(brandRight);
