@@ -141,6 +141,6 @@ export default class Prefs {
         });
         bar.append(bReset); bar.append(bSave);
         root.append(bar);
-        window.set_child(root);
+        window.add(root);
     }
 }

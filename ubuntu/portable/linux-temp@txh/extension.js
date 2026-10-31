@@ -101,6 +101,7 @@ export default class LinuxTempExtension extends Extension {
     enable() {
         log('[linux-temp] loaded v3');
         this._button = new PanelMenu.Button(0.0, 'linux-cpu温度', false);
+        this._button.menuAlignment = 0;
         this._box = new St.BoxLayout({style_class: 'panel-status-menu-box', reactive: false, can_focus: false});
         this._label = new St.Label({text: '\u2013\u2013\u00b0C', y_align: Clutter.ActorAlign.CENTER});
         this._box.add_child(this._label);
@@ -416,7 +417,13 @@ export default class LinuxTempExtension extends Extension {
                 }
             } catch (e) { log('picker err ' + e); }
         };
-        pPath.connect('activate', () => listDir(pPath.get_text(), false));
+        pPath.connect('key-press-event', (w, ev) => {
+            if (ev.get_key_symbol() === Clutter.KEY_Return || ev.get_key_symbol() === Clutter.KEY_KP_Enter) {
+                listDir(pPath.get_text(), false);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
 
         dialog.contentLayout.add_child(root);
         dialog.setButtons([
