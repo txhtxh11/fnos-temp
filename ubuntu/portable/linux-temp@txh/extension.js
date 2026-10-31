@@ -100,8 +100,8 @@ function readLocalCores() {
 export default class LinuxTempExtension extends Extension {
     enable() {
         log('[linux-temp] loaded v3');
-        this._button = new PanelMenu.Button(0.0, 'linux-cpu温度', false);
-        this._button.menuAlignment = 0;
+        this._button = new PanelMenu.Button(0.0, undefined, false);
+        this._button.menuAlignment = 0.5;
         this._box = new St.BoxLayout({style_class: 'panel-status-menu-box', reactive: false, can_focus: false});
         this._label = new St.Label({text: '\u2013\u2013\u00b0C', y_align: Clutter.ActorAlign.CENTER});
         this._box.add_child(this._label);
