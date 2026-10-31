@@ -341,8 +341,43 @@ export default class LinuxTempExtension extends Extension {
         colP.add_child(new St.Label({text: '远程 SSH 主机', style_class: 'fnos-sub-title'}));
         const eHost = mkEntry(colP, '主机 IP/域名', cfg.host);
         const eUser = mkEntry(colP, 'SSH 用户名', cfg.user);
-        const ePort = mkEntry(colP, '端口', cfg.port);
-        const eKey = mkEntry(colP, '密钥路径(可选)', cfg.key);
+        // 端口：短框
+        const portRow = new St.BoxLayout({vertical: false, style_class: 'fnos-row'});
+        const portLab = new St.Label({text: '端口', style_class: 'fnos-label'});
+        portLab.y_align = Clutter.ActorAlign.CENTER;
+        const ePort = new St.Entry({text: cfg.port, can_focus: true, style_class: 'fnos-entry'});
+        ePort.width = 90;
+        ePort.x_expand = false;
+        portRow.add_child(portLab);
+        portRow.add_child(ePort);
+        colP.add_child(portRow);
+        // 密钥路径：输入框 + 浏览按钮（打开资源管理器选密钥文件）
+        const keyRow = new St.BoxLayout({vertical: false, style_class: 'fnos-row'});
+        const keyLab = new St.Label({text: '密钥路径(可选)', style_class: 'fnos-label'});
+        keyLab.y_align = Clutter.ActorAlign.CENTER;
+        const eKey = new St.Entry({text: cfg.key, can_focus: true, style_class: 'fnos-entry'});
+        eKey.x_expand = true;
+        const btnBrowse = new St.Button({label: '浏览…', can_focus: true, style_class: 'fnos-btn'});
+        btnBrowse.connect('clicked', () => {
+            const Gtk = imports.gi.Gtk;
+            const dlg = new Gtk.FileChooserNative({
+                title: '选择 SSH 密钥文件',
+                action: Gtk.FileChooserAction.OPEN,
+            });
+            dlg.set_select_multiple(false);
+            dlg.connect('response', (d, res) => {
+                if (res === Gtk.ResponseType.ACCEPT) {
+                    const f = d.get_filename();
+                    if (f) eKey.set_text(f);
+                }
+                d.destroy();
+            });
+            dlg.show();
+        });
+        keyRow.add_child(keyLab);
+        keyRow.add_child(eKey);
+        keyRow.add_child(btnBrowse);
+        colP.add_child(keyRow);
         const ePass = mkEntry(colP, '密码(可选)', cfg.password);
 
         // 列3：显示传感器
