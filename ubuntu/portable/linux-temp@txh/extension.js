@@ -194,7 +194,7 @@ export default class LinuxTempExtension extends Extension {
         const showRemoteBlock = showRemote && remoteMain != null;
         let label = '';
         if (showLocalBlock && showRemoteBlock) {
-            label = `${localMain}\u00b0C     ${remoteMain}\u00b0C`;
+            label = `${localMain}\u00b0C          ${remoteMain}\u00b0C`;
         } else if (showLocalBlock) {
             label = `${localMain}\u00b0C`;
         } else if (showRemoteBlock) {
@@ -206,7 +206,7 @@ export default class LinuxTempExtension extends Extension {
 
         const lines = [];
         if (showLocalBlock && showRemoteBlock) {
-            lines.push(`左侧: 本机 / 右侧: 远程 ${cfg.host}`);
+            lines.push(`本机(左) ${localMain}\u00b0C   /   远程(右) ${remoteMain}\u00b0C (${cfg.host})`);
         }
         if (showLocalBlock) {
             const lAvg = avgOf(localCores);
