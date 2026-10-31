@@ -12,36 +12,60 @@ const ROLE = 'linuxTemp';
 const CONFIG_DIR = `${GLib.get_home_dir()}/.config/linux-temp`;
 const CONFIG_FILE = `${CONFIG_DIR}/config`;
 
-function readConfig() {
-    const c = {host: '', user: '', port: '22', key: '', password: '', interval: '5',
-               localInterval: '', remoteInterval: '', showLocal: 'true', localType: 'avg', showRemote: 'true', remoteType: 'avg'};
+// 配置内存缓存：启动时异步读一次，之后全部读缓存，避免在 shell 主线程做同步文件 IO（EGO-X-004）
+let configCache = null;
+
+function defaultConfig() {
+    return {host: '', user: '', port: '22', key: '', password: '', interval: '5',
+            localInterval: '', remoteInterval: '', showLocal: 'true', localType: 'avg',
+            showRemote: 'true', remoteType: 'avg'};
+}
+
+function parseConfigText(text) {
+    const c = defaultConfig();
     try {
-        const [ok, contents] = GLib.file_get_contents(CONFIG_FILE);
-        if (ok && contents) {
-            const text = new TextDecoder().decode(contents);
-            for (const line of text.split('\n')) {
-                const i = line.indexOf('=');
-                if (i <= 0) continue;
-                const k = line.slice(0, i).trim();
-                const v = line.slice(i + 1).trim();
-                if (k === 'FNOS_HOST') c.host = v;
-                else if (k === 'FNOS_USER') c.user = v;
-                else if (k === 'FNOS_PORT') c.port = v || '22';
-                else if (k === 'FNOS_KEY') c.key = v;
-                else if (k === 'FNOS_PASSWORD') c.password = v;
-                else if (k === 'INTERVAL') c.interval = v || '5';
-                else if (k === 'LOCAL_INTERVAL') c.localInterval = v;
-                else if (k === 'REMOTE_INTERVAL') c.remoteInterval = v;
-                else if (k === 'SHOW_LOCAL') c.showLocal = v || 'true';
-                else if (k === 'LOCAL_TEMP_TYPE') c.localType = v === 'max' ? 'max' : 'avg';
-                else if (k === 'SHOW_REMOTE') c.showRemote = v || 'true';
-                else if (k === 'REMOTE_TEMP_TYPE') c.remoteType = v === 'max' ? 'max' : 'avg';
-            }
+        for (const line of (text || '').split('\n')) {
+            const i = line.indexOf('=');
+            if (i <= 0) continue;
+            const k = line.slice(0, i).trim();
+            const v = line.slice(i + 1).trim();
+            if (k === 'FNOS_HOST') c.host = v;
+            else if (k === 'FNOS_USER') c.user = v;
+            else if (k === 'FNOS_PORT') c.port = v || '22';
+            else if (k === 'FNOS_KEY') c.key = v;
+            else if (k === 'FNOS_PASSWORD') c.password = v;
+            else if (k === 'INTERVAL') c.interval = v || '5';
+            else if (k === 'LOCAL_INTERVAL') c.localInterval = v;
+            else if (k === 'REMOTE_INTERVAL') c.remoteInterval = v;
+            else if (k === 'SHOW_LOCAL') c.showLocal = v || 'true';
+            else if (k === 'LOCAL_TEMP_TYPE') c.localType = v === 'max' ? 'max' : 'avg';
+            else if (k === 'SHOW_REMOTE') c.showRemote = v || 'true';
+            else if (k === 'REMOTE_TEMP_TYPE') c.remoteType = v === 'max' ? 'max' : 'avg';
         }
-    } catch (e) { log(`linux-temp: readConfig err ${e}`); }
+    } catch (e) { log(`linux-temp: parseConfig err ${e}`); }
     if (!c.localInterval) c.localInterval = c.interval || '5';
     if (!c.remoteInterval) c.remoteInterval = c.interval || '5';
     return c;
+}
+
+// 读内存缓存（无任何文件 IO）
+function readConfig() {
+    return configCache || defaultConfig();
+}
+
+// 启动时异步读一次 config 填充缓存（回调里再启动温度读取）
+function loadConfigAsync(cb) {
+    const f = Gio.File.new_for_path(CONFIG_FILE);
+    f.load_contents_async(null, (file, res) => {
+        try {
+            const [ok, contents] = file.load_contents_finish(res);
+            configCache = parseConfigText(ok && contents ? new TextDecoder().decode(contents) : '');
+        } catch (e) {
+            configCache = defaultConfig();
+            log(`linux-temp: loadConfigAsync err ${e}`);
+        }
+        if (cb) cb();
+    });
 }
 
 function writeConfig(c) {
@@ -63,11 +87,25 @@ function writeConfig(c) {
         ].join('\n') + '\n';
         GLib.file_set_contents(CONFIG_FILE, new TextEncoder().encode(text));
         GLib.chmod(CONFIG_FILE, 0o600);
+        configCache = parseConfigText(text);   // 写回后同步内存缓存
     } catch (e) { log(`linux-temp: writeConfig err ${e}`); }
 }
 
-// 读取本机 coretemp 所有核温度（毫摄氏度→摄氏度），返回各核温度数组
-function readLocalCores() {
+// 异步读文件内容（后台线程，不阻塞 shell 主线程）
+function readFileAsync(path) {
+    return new Promise((resolve) => {
+        const f = Gio.File.new_for_path(path);
+        f.load_contents_async(null, (file, res) => {
+            try {
+                const [ok, contents] = file.load_contents_finish(res);
+                resolve(ok ? contents : null);
+            } catch (e) { resolve(null); }
+        });
+    });
+}
+
+// 读取本机 coretemp 所有核温度（毫摄氏度→摄氏度），返回各核温度数组（异步）
+async function readLocalCores() {
     const cores = [];
     try {
         const base = Gio.File.new_for_path('/sys/class/hwmon');
@@ -77,8 +115,8 @@ function readLocalCores() {
         while ((info = it.next_file(null)) !== null) {
             const d = info.get_name();
             if (!/^hwmon\d+$/.test(d)) continue;
-            const [ok, bytes] = GLib.file_get_contents(`/sys/class/hwmon/${d}/name`);
-            if (!ok) continue;
+            const bytes = await readFileAsync(`/sys/class/hwmon/${d}/name`);
+            if (!bytes) continue;
             const name = new TextDecoder().decode(bytes).trim();
             if (name !== 'coretemp') continue;
             const sub = base.get_child(d).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
@@ -86,8 +124,8 @@ function readLocalCores() {
             while ((s = sub.next_file(null)) !== null) {
                 const f = s.get_name();
                 if (!/^temp\d+_input$/.test(f)) continue;
-                const [ok2, bytes2] = GLib.file_get_contents(`/sys/class/hwmon/${d}/${f}`);
-                if (!ok2) continue;
+                const bytes2 = await readFileAsync(`/sys/class/hwmon/${d}/${f}`);
+                if (!bytes2) continue;
                 const v = parseInt(new TextDecoder().decode(bytes2).trim(), 10);
                 if (!Number.isNaN(v) && v > 0) cores.push(Math.round(v / 1000));
             }
@@ -135,9 +173,13 @@ export default class LinuxTempExtension extends Extension {
         this._lastLocal = null;
         this._lastRemote = null;
         this._lastCores = [];
-        this._readLocalNow();
-        if (readConfig().host) this._readRemoteNow();
-        this._restartTimers();
+        // config 异步加载完成后启动温度读取（启动时只异步读一次，避免同步文件 IO）
+        loadConfigAsync(() => {
+            this._readLocalNow();
+            if (readConfig().host) this._readRemoteNow();
+            this._restartTimers();
+            this._updateDisplay();
+        });
     }
 
     _updateHead() {
@@ -183,9 +225,9 @@ export default class LinuxTempExtension extends Extension {
         });
     }
 
-    _readLocalNow() {
+    async _readLocalNow() {
         const cfg = readConfig();
-        const cores = readLocalCores();
+        const cores = await readLocalCores();
         let localMain = null;
         if (cores.length) {
             localMain = cfg.localType === 'max'
