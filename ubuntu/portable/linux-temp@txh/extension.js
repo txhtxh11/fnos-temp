@@ -14,7 +14,7 @@ const CONFIG_FILE = `${CONFIG_DIR}/config`;
 
 function readConfig() {
     const c = {host: '', user: '', port: '22', key: '', password: '', interval: '5',
-               showLocal: 'true', localType: 'avg'};
+               localInterval: '', remoteInterval: '', showLocal: 'true', localType: 'avg'};
     try {
         const [ok, contents] = GLib.file_get_contents(CONFIG_FILE);
         if (ok && contents) {
@@ -30,11 +30,15 @@ function readConfig() {
                 else if (k === 'FNOS_KEY') c.key = v;
                 else if (k === 'FNOS_PASSWORD') c.password = v;
                 else if (k === 'INTERVAL') c.interval = v || '5';
+                else if (k === 'LOCAL_INTERVAL') c.localInterval = v;
+                else if (k === 'REMOTE_INTERVAL') c.remoteInterval = v;
                 else if (k === 'SHOW_LOCAL') c.showLocal = v || 'true';
                 else if (k === 'LOCAL_TEMP_TYPE') c.localType = v === 'max' ? 'max' : 'avg';
             }
         }
     } catch (e) { log(`linux-temp: readConfig err ${e}`); }
+    if (!c.localInterval) c.localInterval = c.interval || '5';
+    if (!c.remoteInterval) c.remoteInterval = c.interval || '5';
     return c;
 }
 
@@ -48,6 +52,8 @@ function writeConfig(c) {
             `FNOS_KEY=${c.key}`,
             `FNOS_PASSWORD=${c.password}`,
             `INTERVAL=${c.interval || '5'}`,
+            `LOCAL_INTERVAL=${c.localInterval || c.interval || '5'}`,
+            `REMOTE_INTERVAL=${c.remoteInterval || c.interval || '5'}`,
             `SHOW_LOCAL=${c.showLocal === 'false' ? 'false' : 'true'}`,
             `LOCAL_TEMP_TYPE=${c.localType === 'max' ? 'max' : 'avg'}`,
         ].join('\n') + '\n';
@@ -101,23 +107,35 @@ export default class LinuxTempExtension extends Extension {
         this._button.menu.addMenuItem(head);
         this._button.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._refreshItem = new PopupMenu.PopupMenuItem('刷新');
-        this._refreshItem.connect('activate', () => this._readNow());
+        this._refreshItem.connect('activate', () => { this._readLocalNow(); this._readRemoteNow(); });
         this._button.menu.addMenuItem(this._refreshItem);
         this._settingsItem = new PopupMenu.PopupMenuItem('设置…');
         this._settingsItem.connect('activate', () => this._openSettings());
         this._button.menu.addMenuItem(this._settingsItem);
 
         Main.panel.addToStatusArea(ROLE, this._button);
-        this._readNow();
-        this._restartTimer();
+        this._lastLocal = null;
+        this._lastRemote = null;
+        this._lastCores = [];
+        this._readLocalNow();
+        if (readConfig().host) this._readRemoteNow();
+        this._restartTimers();
     }
 
-    _restartTimer() {
-        if (this._timer) GLib.source_remove(this._timer);
+    _restartTimers() {
+        if (this._localTimer) GLib.source_remove(this._localTimer);
+        if (this._remoteTimer) GLib.source_remove(this._remoteTimer);
+        this._localTimer = null;
+        this._remoteTimer = null;
         const cfg = readConfig();
-        const sec = Math.max(1, parseInt(cfg.interval, 10) || 5);
-        this._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, sec, () => {
-            this._readNow();
+        const localSec = Math.max(1, parseInt(cfg.localInterval, 10) || 5);
+        const remoteSec = Math.max(1, parseInt(cfg.remoteInterval, 10) || 5);
+        this._localTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, localSec, () => {
+            this._readLocalNow();
+            return GLib.SOURCE_CONTINUE;
+        });
+        this._remoteTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, remoteSec, () => {
+            this._readRemoteNow();
             return GLib.SOURCE_CONTINUE;
         });
     }
@@ -139,7 +157,7 @@ export default class LinuxTempExtension extends Extension {
         });
     }
 
-    _readNow() {
+    _readLocalNow() {
         const cfg = readConfig();
         const cores = readLocalCores();
         let localMain = null;
@@ -148,14 +166,22 @@ export default class LinuxTempExtension extends Extension {
                 ? Math.max(...cores)
                 : Math.round(cores.reduce((a, b) => a + b, 0) / cores.length);
         }
-        if (cfg.host) {
-            this._readRemote(cfg, (rv) => this._updateDisplay(localMain, rv, cfg, cores));
-        } else {
-            this._updateDisplay(localMain, null, cfg, cores);
-        }
+        this._lastLocal = localMain;
+        this._lastCores = cores;
+        this._updateDisplay();
     }
 
-    _updateDisplay(localMain, remoteVal, cfg, cores) {
+    _readRemoteNow() {
+        const cfg = readConfig();
+        if (!cfg.host) return;
+        this._readRemote(cfg, (rv) => { this._lastRemote = rv; this._updateDisplay(); });
+    }
+
+    _updateDisplay() {
+        const cfg = readConfig();
+        const localMain = this._lastLocal;
+        const remoteVal = this._lastRemote;
+        const cores = this._lastCores || [];
         const useLocal = cfg.showLocal !== 'false';
         let main = null;
         if (useLocal && localMain != null) main = localMain;
@@ -272,11 +298,6 @@ export default class LinuxTempExtension extends Extension {
             : '（未读到 coretemp）', style_class: 'fnos-hint'});
         rowCores.add_child(coresLab);
 
-        // ---- 远程主机页 ----
-        const pageRemote = makePage('远程主机');
-        pageRemote.add_child(new St.Label({text: '远程 SSH 主机（可选）', style_class: 'fnos-section-title'}));
-        const hintRemote = new St.Label({text: '通过 SSH 读取局域网内 Linux 主机的 CPU 温度', style_class: 'fnos-hint'});
-        pageRemote.add_child(hintRemote);
         const mkEntry = (page, label, val) => {
             const row = mkRow(page, label);
             const entry = new St.Entry({text: val, can_focus: true, style_class: 'fnos-entry'});
@@ -284,12 +305,19 @@ export default class LinuxTempExtension extends Extension {
             row.add_child(entry);
             return entry;
         };
+        const eLocalIv = mkEntry(pageLocal, '本机刷新间隔(秒)', cfg.localInterval);
+
+        // ---- 远程主机页 ----
+        const pageRemote = makePage('远程主机');
+        pageRemote.add_child(new St.Label({text: '远程 SSH 主机（可选）', style_class: 'fnos-section-title'}));
+        const hintRemote = new St.Label({text: '通过 SSH 读取局域网内 Linux 主机的 CPU 温度', style_class: 'fnos-hint'});
+        pageRemote.add_child(hintRemote);
         const eHost = mkEntry(pageRemote, '远程主机 IP/域名', cfg.host);
         const eUser = mkEntry(pageRemote, 'SSH 用户名', cfg.user);
         const ePort = mkEntry(pageRemote, '端口', cfg.port);
         const eKey = mkEntry(pageRemote, '密钥文件路径(可选)', cfg.key);
         const ePass = mkEntry(pageRemote, '密码(可选)', cfg.password);
-        const eInterval = mkEntry(pageRemote, '刷新间隔(秒)', cfg.interval);
+        const eRemoteIv = mkEntry(pageRemote, '远程刷新间隔(秒)', cfg.remoteInterval);
 
         // ---- 关于页 ----
         const pageAbout = makePage('关于');
@@ -312,12 +340,15 @@ export default class LinuxTempExtension extends Extension {
                     port: ePort.get_text().trim() || '22',
                     key: eKey.get_text().trim(),
                     password: ePass.get_text(),
-                    interval: eInterval.get_text().trim() || '5',
+                    interval: cfg.interval || '5',
+                    localInterval: eLocalIv.get_text().trim() || '5',
+                    remoteInterval: eRemoteIv.get_text().trim() || '5',
                     showLocal: swLocal.active ? 'true' : 'false',
                     localType,
                 });
-                this._restartTimer();
-                this._readNow();
+                this._restartTimers();
+                this._readLocalNow();
+                this._readRemoteNow();
                 dialog.close();
             }},
         ]);
@@ -327,7 +358,8 @@ export default class LinuxTempExtension extends Extension {
     }
 
     disable() {
-        if (this._timer) { GLib.source_remove(this._timer); this._timer = null; }
+        if (this._localTimer) { GLib.source_remove(this._localTimer); this._localTimer = null; }
+        if (this._remoteTimer) { GLib.source_remove(this._remoteTimer); this._remoteTimer = null; }
         if (this._dialog) { this._dialog.close(); this._dialog = null; }
         this._button?.destroy();
         this._button = null;
