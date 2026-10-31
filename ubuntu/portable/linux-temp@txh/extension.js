@@ -224,8 +224,8 @@ export default class LinuxTempExtension extends Extension {
         const btnAvg = new St.Button({label: '平均温度', can_focus: true, style_class: 'fnos-btn'});
         const btnMax = new St.Button({label: '最高温度', can_focus: true, style_class: 'fnos-btn'});
         const refreshType = () => {
-            btnAvg.set_style_class('fnos-btn' + (localType === 'avg' ? ' fnos-btn-active' : ''));
-            btnMax.set_style_class('fnos-btn' + (localType === 'max' ? ' fnos-btn-active' : ''));
+            btnAvg.set_style_class_name('fnos-btn' + (localType === 'avg' ? ' fnos-btn-active' : ''));
+            btnMax.set_style_class_name('fnos-btn' + (localType === 'max' ? ' fnos-btn-active' : ''));
         };
         refreshType();
         btnAvg.connect('clicked', () => { localType = 'avg'; refreshType(); });
