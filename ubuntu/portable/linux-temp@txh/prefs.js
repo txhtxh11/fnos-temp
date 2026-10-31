@@ -102,7 +102,7 @@ function mkSwitch(label, on) {
 export default class Prefs {
     fillPreferencesWindow(window) {
         const _b = new Gtk.CssProvider();
-        _b.load_from_data('dropdown, dropdown button, dropdown button label, dropdown label, row:selected, row:selected label { font-weight: normal !important; }');
+        _b.load_from_string('dropdown, dropdown button, dropdown button label, dropdown label, row:selected, row:selected label { font-weight: normal !important; }');
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), _b, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
         const cfg = readConfig();
         const root = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 16,
