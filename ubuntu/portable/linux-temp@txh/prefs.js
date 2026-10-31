@@ -64,15 +64,15 @@ function mkTitle(text) {
     return l;
 }
 function mkSpin(label, val) {
-    const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 6 });
-    box.append(new Gtk.Label({ label, halign: Gtk.Align.START, hexpand: true }));
+    const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
+    box.append(new Gtk.Label({ label, halign: Gtk.Align.START }));
     const spin = new Gtk.SpinButton({ adjustment: new Gtk.Adjustment({ lower: 1, upper: 300, step_increment: 1, value: parseInt(val || '5') || 5 }), width_chars: 4 });
     box.append(spin);
     return { box, spin };
 }
 function mkType(label, cur) {
-    const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 6 });
-    box.append(new Gtk.Label({ label, halign: Gtk.Align.START, hexpand: true }));
+    const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
+    box.append(new Gtk.Label({ label, halign: Gtk.Align.START }));
     const combo = Gtk.ComboBoxText.new();
     combo.append('avg', '平均温度');
     combo.append('max', '最高温度');
@@ -80,15 +80,17 @@ function mkType(label, cur) {
     box.append(combo);
     return { box, combo };
 }
-function mkEntry(label) {
-    const l = new Gtk.Label({ label, halign: Gtk.Align.START, xalign: 0 });
+function mkEntry(label, widthChars) {
+    const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
+    box.append(new Gtk.Label({ label, halign: Gtk.Align.START, xalign: 0 }));
     const e = new Gtk.Entry();
-    e.set_hexpand(true);
-    return { box: [l, e], entry: e };
+    if (widthChars) e.width_chars = widthChars;
+    box.append(e);
+    return { box, entry: e };
 }
 function mkSwitch(label, on) {
-    const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 6 });
-    box.append(new Gtk.Label({ label, halign: Gtk.Align.START, hexpand: true }));
+    const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
+    box.append(new Gtk.Label({ label, halign: Gtk.Align.START }));
     const sw = new Gtk.Switch();
     sw.set_active((on || 'true') === 'true');
     box.append(sw);
@@ -98,28 +100,45 @@ function mkSwitch(label, on) {
 export default class Prefs {
     fillPreferencesWindow(window) {
         const cfg = readConfig();
-        const root = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 10,
+        const root = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 16,
                                    margin_top: 14, margin_bottom: 14, margin_start: 18, margin_end: 18 });
-        const cols = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 16 });
-        root.append(cols);
 
-        // 列1 显示选项
-        const col1 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6, hexpand: true });
-        col1.append(mkTitle('显示选项'));
-        const lIv = mkSpin('本机刷新间隔(秒)', cfg.localInterval); col1.append(lIv.box);
-        const rIv = mkSpin('远程刷新间隔(秒)', cfg.remoteInterval); col1.append(rIv.box);
-        const lTy = mkType('本机显示', cfg.localType); col1.append(lTy.box);
-        const rTy = mkType('远程显示', cfg.remoteType); col1.append(rTy.box);
-        cols.append(col1);
+        // 段1 显示传感器（一行两个开关）
+        const g1 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 8 });
+        g1.append(mkTitle('显示传感器'));
+        const swL = mkSwitch('本机温度', cfg.showLocal);
+        const swR = mkSwitch('远程温度', cfg.showRemote);
+        const row1 = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 28 });
+        row1.append(swL.box); row1.append(swR.box);
+        g1.append(row1);
+        root.append(g1);
 
-        // 列2 传感器提供程序
-        const col2 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6, hexpand: true });
-        col2.append(mkTitle('传感器提供程序'));
-        const eHost = mkEntry('远程主机 IP'); col2.append(eHost.box[0]); col2.append(eHost.box[1]); eHost.entry.set_text(cfg.host);
-        const eUser = mkEntry('用户名'); col2.append(eUser.box[0]); col2.append(eUser.box[1]); eUser.entry.set_text(cfg.user);
-        const ePort = mkEntry('端口'); col2.append(ePort.box[0]); col2.append(ePort.box[1]); ePort.entry.set_text(cfg.port);
-        col2.append(new Gtk.Label({ label: '密钥路径(可选)', halign: Gtk.Align.START, xalign: 0 }));
-        const kr = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 6 });
+        // 段2 显示选项（两行，每行两个并排）
+        const g2 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 8 });
+        g2.append(mkTitle('显示选项'));
+        const lIv = mkSpin('本机刷新间隔(秒)', cfg.localInterval);
+        const rIv = mkSpin('远程刷新间隔(秒)', cfg.remoteInterval);
+        const row2a = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 28 });
+        row2a.append(lIv.box); row2a.append(rIv.box);
+        g2.append(row2a);
+        const lTy = mkType('本机显示', cfg.localType);
+        const rTy = mkType('远程显示', cfg.remoteType);
+        const row2b = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 28 });
+        row2b.append(lTy.box); row2b.append(rTy.box);
+        g2.append(row2b);
+        root.append(g2);
+
+        // 段3 传感器提供程序（IP/用户名/端口 一行三个，密钥、密码各一行）
+        const g3 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 8 });
+        g3.append(mkTitle('传感器提供程序'));
+        const eHost = mkEntry('远程主机 IP', 15); eHost.entry.set_text(cfg.host);
+        const eUser = mkEntry('用户名', 8); eUser.entry.set_text(cfg.user);
+        const ePort = mkEntry('端口', 5); ePort.entry.set_text(cfg.port);
+        const row3 = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 12 });
+        row3.append(eHost.box); row3.append(eUser.box); row3.append(ePort.box);
+        g3.append(row3);
+        const krow = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
+        krow.append(new Gtk.Label({ label: '密钥路径(可选)', halign: Gtk.Align.START, xalign: 0 }));
         const eKey = new Gtk.Entry(); eKey.set_text(cfg.key); eKey.set_hexpand(true);
         const bBrowse = new Gtk.Button({ label: '浏览…' });
         bBrowse.connect('clicked', () => {
@@ -130,17 +149,11 @@ export default class Prefs {
             });
             fc.show();
         });
-        kr.append(eKey); kr.append(bBrowse);
-        col2.append(kr);
-        const ePass = mkEntry('密码(可选)'); col2.append(ePass.box[0]); col2.append(ePass.box[1]); ePass.entry.set_text(cfg.password);
-        cols.append(col2);
-
-        // 列3 显示传感器
-        const col3 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6, hexpand: true });
-        col3.append(mkTitle('显示传感器'));
-        const swL = mkSwitch('本机温度', cfg.showLocal); col3.append(swL.box);
-        const swR = mkSwitch('远程温度', cfg.showRemote); col3.append(swR.box);
-        cols.append(col3);
+        krow.append(eKey); krow.append(bBrowse);
+        g3.append(krow);
+        const ePass = mkEntry('密码(可选)', 10); ePass.entry.set_text(cfg.password);
+        g3.append(ePass.box);
+        root.append(g3);
 
         // 按钮栏
         const bar = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8, halign: Gtk.Align.END });
