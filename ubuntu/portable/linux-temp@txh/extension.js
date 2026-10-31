@@ -488,8 +488,14 @@ export default class LinuxTempExtension extends Extension {
         if (this._localTimer) { GLib.source_remove(this._localTimer); this._localTimer = null; }
         if (this._remoteTimer) { GLib.source_remove(this._remoteTimer); this._remoteTimer = null; }
         if (this._dialog) { this._dialog.close(); this._dialog = null; }
+        // 显式销毁 enable() 创建的对象（EGO-L-002）
+        this._label?.destroy();
+        this._box?.destroy();
+        this._head?.destroy();
+        this._refreshItem?.destroy();
+        this._settingsItem?.destroy();
         this._button?.destroy();
-        // 释放 owned 引用（EOG 审查：release references with null）
+        // 释放 owned 引用（EGO-L-005）
         this._button = null;
         this._box = null;
         this._label = null;
