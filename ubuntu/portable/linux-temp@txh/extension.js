@@ -108,8 +108,8 @@ export default class LinuxTempExtension extends Extension {
         this._button.add_child(this._box);
         this._button.tooltip_text = 'linux-cpu温度：未配置';
 
-        const head = new PopupMenu.PopupMenuItem('本机         远程', {reactive: false});
-        this._button.menu.addMenuItem(head);
+        this._head = new PopupMenu.PopupMenuItem('本机         远程', {reactive: false});
+        this._button.menu.addMenuItem(this._head);
         this._button.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._refreshItem = new PopupMenu.PopupMenuItem('刷新');
         this._refreshItem.connect('activate', () => { this._readLocalNow(); this._readRemoteNow(); });
@@ -123,9 +123,13 @@ export default class LinuxTempExtension extends Extension {
             item.label.x_expand = true;
             item.label.x_align = Clutter.ActorAlign.CENTER;
         };
-        centerItem(head);
+        centerItem(this._head);
         centerItem(this._refreshItem);
         centerItem(this._settingsItem);
+
+        this._button.menu.connect('open-state-changed', (menu, open) => {
+            if (open) this._updateHead();
+        });
 
         Main.panel.addToStatusArea(ROLE, this._button);
         this._lastLocal = null;
@@ -134,6 +138,17 @@ export default class LinuxTempExtension extends Extension {
         this._readLocalNow();
         if (readConfig().host) this._readRemoteNow();
         this._restartTimers();
+    }
+
+    _updateHead() {
+        const cfg = readConfig();
+        const sL = cfg.showLocal === 'true';
+        const sR = cfg.showRemote === 'true';
+        let text = '未显示';
+        if (sL && sR) text = '本机         远程';
+        else if (sL) text = '本机';
+        else if (sR) text = '远程';
+        this._head.label.set_text(text);
     }
 
     _restartTimers() {
