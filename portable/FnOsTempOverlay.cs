@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -30,14 +31,8 @@ namespace FnOsTempTray
             {
                 if (!created) return;
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-                Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
-                {
-                    Log("ThreadException: " + e.Exception);
-                };
-                AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e)
-                {
-                    Log("Unhandled: " + e.ExceptionObject);
-                };
+                Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e) { Log("ThreadException: " + e.Exception); };
+                AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) { Log("Unhandled: " + e.ExceptionObject); };
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.Run(new TrayContext());
@@ -51,8 +46,7 @@ namespace FnOsTempTray
             {
                 string name = new AssemblyName(e.Name).Name;
                 string path = Path.Combine(BaseDir, name + ".dll");
-                if (File.Exists(path))
-                    return Assembly.Load(File.ReadAllBytes(path));
+                if (File.Exists(path)) return Assembly.Load(File.ReadAllBytes(path));
             }
             catch { }
             return null;
@@ -63,16 +57,8 @@ namespace FnOsTempTray
             try
             {
                 string path = Path.Combine(BaseDir, "app.log");
-                // 简单日志轮转：超过 512KB 直接清空，避免日志无限增长占用磁盘
-                if (File.Exists(path))
-                {
-                    FileInfo fi = new FileInfo(path);
-                    if (fi.Length > 512 * 1024) File.Delete(path);
-                }
-                File.AppendAllText(
-                    path,
-                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + message + Environment.NewLine,
-                    Encoding.UTF8);
+                if (File.Exists(path)) { var fi = new FileInfo(path); if (fi.Length > 512 * 1024) File.Delete(path); }
+                File.AppendAllText(path, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + message + Environment.NewLine, Encoding.UTF8);
             }
             catch { }
         }
@@ -82,18 +68,19 @@ namespace FnOsTempTray
     {
         public string Host = "";
         public int Port = 22;
-        public string User = "";
+        public string User = "t";
         public string Auth = "key";
         public string KeyPath = "";
         public string PasswordEnc = "";
-        // 默认 10 秒：CPU 温度变化缓慢，高频 SSH 轮询没有必要，低频更省资源
-        public int IntervalSeconds = 10;
+        public int LocalInterval = 2;
+        public int RemoteInterval = 5;
+        public string LocalMode = "max";
+        public string RemoteMode = "max";
+        public bool ShowLocal = true;
+        public bool ShowRemote = true;
         public bool ShowTrayIcon = true;
 
-        public static string FilePath
-        {
-            get { return Path.Combine(Program.BaseDir, "config.ini"); }
-        }
+        public static string FilePath { get { return Path.Combine(Program.BaseDir, "config.ini"); } }
 
         public static Config Load()
         {
@@ -106,24 +93,31 @@ namespace FnOsTempTray
                     if (line.Length == 0 || line[0] == '#' || line[0] == ';') continue;
                     int eq = line.IndexOf('=');
                     if (eq <= 0) continue;
-                    string key = line.Substring(0, eq).Trim().ToLowerInvariant();
-                    string val = line.Substring(eq + 1).Trim();
-                    switch (key)
+                    string k = line.Substring(0, eq).Trim().ToLowerInvariant();
+                    string v = line.Substring(eq + 1).Trim();
+                    switch (k)
                     {
-                        case "host": c.Host = val; break;
-                        case "port": int.TryParse(val, out c.Port); break;
-                        case "user": c.User = val; break;
-                        case "auth": c.Auth = val; break;
-                        case "keypath": c.KeyPath = val; break;
-                        case "passwordenc": c.PasswordEnc = val; break;
-                        case "intervalseconds": int.TryParse(val, out c.IntervalSeconds); break;
-                        case "showtrayicon": c.ShowTrayIcon = val != "0"; break;
+                        case "host": c.Host = v; break;
+                        case "port": int.TryParse(v, out c.Port); break;
+                        case "user": c.User = v; break;
+                        case "auth": c.Auth = v; break;
+                        case "keypath": c.KeyPath = v; break;
+                        case "passwordenc": c.PasswordEnc = v; break;
+                        case "localinterval": int.TryParse(v, out c.LocalInterval); break;
+                        case "remoteinterval": int.TryParse(v, out c.RemoteInterval); break;
+                        case "localmode": c.LocalMode = v; break;
+                        case "remotemode": c.RemoteMode = v; break;
+                        case "showlocal": c.ShowLocal = v != "0"; break;
+                        case "showremote": c.ShowRemote = v != "0"; break;
+                        case "showtrayicon": c.ShowTrayIcon = v != "0"; break;
                     }
                 }
             }
             if (c.Port < 1 || c.Port > 65535) c.Port = 22;
-            if (c.IntervalSeconds < 1) c.IntervalSeconds = 1;
-            if (c.IntervalSeconds > 60) c.IntervalSeconds = 60;
+            if (c.LocalInterval < 1) c.LocalInterval = 1; if (c.LocalInterval > 60) c.LocalInterval = 60;
+            if (c.RemoteInterval < 1) c.RemoteInterval = 1; if (c.RemoteInterval > 60) c.RemoteInterval = 60;
+            if (c.LocalMode != "avg") c.LocalMode = "max";
+            if (c.RemoteMode != "avg") c.RemoteMode = "max";
             if (!string.Equals(c.Auth, "password", StringComparison.OrdinalIgnoreCase)) c.Auth = "key";
             if (!Path.IsPathRooted(c.KeyPath)) c.KeyPath = Path.Combine(Program.BaseDir, c.KeyPath);
             return c;
@@ -138,7 +132,12 @@ namespace FnOsTempTray
             sb.AppendLine("Auth=" + Auth);
             sb.AppendLine("KeyPath=" + KeyPath);
             sb.AppendLine("PasswordEnc=" + PasswordEnc);
-            sb.AppendLine("IntervalSeconds=" + IntervalSeconds.ToString(CultureInfo.InvariantCulture));
+            sb.AppendLine("LocalInterval=" + LocalInterval);
+            sb.AppendLine("RemoteInterval=" + RemoteInterval);
+            sb.AppendLine("LocalMode=" + LocalMode);
+            sb.AppendLine("RemoteMode=" + RemoteMode);
+            sb.AppendLine("ShowLocal=" + (ShowLocal ? "1" : "0"));
+            sb.AppendLine("ShowRemote=" + (ShowRemote ? "1" : "0"));
             sb.AppendLine("ShowTrayIcon=" + (ShowTrayIcon ? "1" : "0"));
             File.WriteAllText(FilePath, sb.ToString(), new UTF8Encoding(false));
         }
@@ -146,297 +145,241 @@ namespace FnOsTempTray
         public string GetPassword()
         {
             if (string.IsNullOrEmpty(PasswordEnc)) return "";
-            try
-            {
-                byte[] data = Convert.FromBase64String(PasswordEnc);
-                byte[] plain = ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser);
-                return Encoding.UTF8.GetString(plain);
-            }
+            try { return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(PasswordEnc), null, DataProtectionScope.CurrentUser)); }
             catch { return ""; }
         }
-
         public void SetPassword(string password)
         {
             if (string.IsNullOrEmpty(password)) { PasswordEnc = ""; return; }
-            byte[] data = ProtectedData.Protect(Encoding.UTF8.GetBytes(password), null, DataProtectionScope.CurrentUser);
-            PasswordEnc = Convert.ToBase64String(data);
+            PasswordEnc = Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(password), null, DataProtectionScope.CurrentUser));
         }
     }
 
     internal static class Autostart
     {
-        private static string LinkPath
-        {
-            get
-            {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Startup),
-                    "linux-cpu温度.vbs");
-            }
-        }
-
-        public static bool IsEnabled()
-        {
-            return File.Exists(LinkPath);
-        }
-
+        private static string LinkPath { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "linux-cpu温度.vbs"); } }
+        public static bool IsEnabled() { return File.Exists(LinkPath); }
         public static void Set(bool enabled)
         {
-            if (!enabled)
-            {
-                if (File.Exists(LinkPath)) File.Delete(LinkPath);
-                return;
-            }
+            if (!enabled) { if (File.Exists(LinkPath)) File.Delete(LinkPath); return; }
             string ps1 = Path.Combine(Program.BaseDir, "FnOsTempOverlay.ps1");
-            string vbs =
-                "Set sh = CreateObject(\"WScript.Shell\")\r\n" +
-                "sh.Run \"powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\"" +
-                ps1 + "\"\"\", 0, False\r\n";
-            File.WriteAllText(LinkPath, vbs, Encoding.Unicode);
+            File.WriteAllText(LinkPath,
+                "Set sh = CreateObject(\"WScript.Shell\")\r\nsh.Run \"powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\"" + ps1 + "\"\"\", 0, False\r\n",
+                Encoding.Unicode);
         }
     }
 
-    internal sealed class TempReader : IDisposable
+    // 本机 Core Temp 共享内存读取
+    internal sealed class LocalTempReader : IDisposable
+    {
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr OpenFileMappingW(uint a, bool b, string n);
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr MapViewOfFile(IntPtr h, uint a, uint hi, uint lo, UIntPtr n);
+        [DllImport("kernel32.dll")]
+        private static extern bool UnmapViewOfFile(IntPtr p);
+        [DllImport("kernel32.dll")]
+        private static extern bool CloseHandle(IntPtr h);
+
+        private Thread _t; private volatile bool _stop;
+        private volatile int[] _temps = new int[0]; private volatile bool _ok;
+        public int[] Temps { get { return _temps; } }
+        public bool Ok { get { return _ok; } }
+        public int MaxTemp { get { int m = -1; foreach (int v in _temps) if (v > m) m = v; return m; } }
+
+        public void Start(int ms) { Stop(); _stop = false; _t = new Thread(() => Loop(ms)) { IsBackground = true }; _t.Start(); }
+        public void Stop() { _stop = true; var t = _t; _t = null; if (t != null) try { t.Join(1500); } catch { } _temps = new int[0]; _ok = false; }
+
+        private void Loop(int ms)
+        {
+            while (!_stop)
+            {
+                try
+                {
+                    IntPtr h = OpenFileMappingW(0x0004, false, "CoreTempMappingObjectEx");
+                    if (h == IntPtr.Zero) h = OpenFileMappingW(0x0004, false, "CoreTempMappingObject");
+                    if (h != IntPtr.Zero)
+                    {
+                        IntPtr p = MapViewOfFile(h, 0x0004, 0, 0, UIntPtr.Zero);
+                        if (p != IntPtr.Zero)
+                        {
+                            try
+                            {
+                                byte[] buf = new byte[4096];
+                                Marshal.Copy(p, buf, 0, buf.Length);
+                                int cc = BitConverter.ToInt32(buf, 1536);
+                                if (cc > 0 && cc <= 256)
+                                {
+                                    bool delta = buf[2685] != 0;
+                                    var list = new List<int>();
+                                    for (int i = 0; i < cc; i++)
+                                    {
+                                        float tv = BitConverter.ToSingle(buf, 1544 + i * 4);
+                                        uint tj = BitConverter.ToUInt32(buf, 1024 + i * 4);
+                                        list.Add((int)Math.Round(delta ? tj - tv : tv));
+                                    }
+                                    _temps = list.ToArray(); _ok = true;
+                                }
+                            }
+                            finally { UnmapViewOfFile(p); }
+                        }
+                        CloseHandle(h);
+                    }
+                    else { _ok = false; _temps = new int[0]; }
+                }
+                catch (Exception ex) { Program.Log("local: " + ex.Message); _ok = false; }
+                int left = ms; while (left > 0 && !_stop) { Thread.Sleep(Math.Min(100, left)); left -= 100; }
+            }
+        }
+        public void Dispose() { Stop(); }
+    }
+
+    // 远程 SSH 各核温度
+    internal sealed class RemoteTempReader : IDisposable
     {
         private const string TempCommand = @"
+for h in /sys/class/hwmon/hwmon*; do
+  n=$(cat ""$h/name"" 2>/dev/null)
+  case ""$n"" in
+    coretemp|k10temp|zenpower)
+      for f in $h/temp*_input; do cat ""$f"" 2>/dev/null; done
+      exit 0;;
+  esac
+done
 for z in /sys/class/thermal/thermal_zone*; do
   t=$(cat ""$z/type"" 2>/dev/null)
   case ""$t"" in
     x86_pkg_temp|cpu_thermal|cpu-thermal|soc_thermal|soc-thermal) cat ""$z/temp"" 2>/dev/null; exit 0;;
   esac
 done
-for h in /sys/class/hwmon/hwmon*; do
-  n=$(cat ""$h/name"" 2>/dev/null)
-  case ""$n"" in
-    coretemp|k10temp|zenpower) cat $h/temp*_input 2>/dev/null | sort -n | tail -1; exit 0;;
-  esac
-done
-max=0
-for z in /sys/class/thermal/thermal_zone*; do
-  v=$(cat ""$z/temp"" 2>/dev/null)
-  case ""$v"" in ''|*[!0-9]*) continue;; esac
-  [ ""$v"" -gt ""$max"" ] && max=$v
-done
-[ ""$max"" -gt 0 ] && echo ""$max""
 ";
-
         private readonly Config _config;
-        private Thread _thread;
-        private volatile bool _stop;
-        private volatile int _temp = -1;
-        private string _error = "";
+        private Thread _t; private volatile bool _stop;
+        private volatile int[] _temps = new int[0]; private volatile bool _ok; private string _err = "";
+        public int[] Temps { get { return _temps; } }
+        public bool Ok { get { return _ok; } }
+        public int MaxTemp { get { int m = -1; foreach (int v in _temps) if (v > m) m = v; return m; } }
 
-        public TempReader(Config config) { _config = config; }
-
-        public int Temp { get { return _temp; } }
-        public string LastError { get { return _error; } }
-
-        public void Start()
-        {
-            Stop();
-            _stop = false;
-            _thread = new Thread(Loop);
-            _thread.IsBackground = true;
-            _thread.Start();
-        }
-
-        public void Stop()
-        {
-            _stop = true;
-            Thread t = _thread;
-            _thread = null;
-            if (t != null)
-            {
-                try { t.Join(2000); } catch { }
-            }
-            _temp = -1;
-        }
+        public RemoteTempReader(Config c) { _config = c; }
+        public void Start() { Stop(); _stop = false; _t = new Thread(Loop) { IsBackground = true }; _t.Start(); }
+        public void Stop() { _stop = true; var t = _t; _t = null; if (t != null) try { t.Join(1500); } catch { } _temps = new int[0]; _ok = false; }
 
         private void Loop()
         {
-            try
+            while (!_stop)
             {
-                while (!_stop)
+                try
                 {
-                    try
+                    using (var client = CreateClient())
                     {
-                        using (SshClient client = CreateClient())
+                        client.ConnectionInfo.Timeout = TimeSpan.FromSeconds(8);
+                        client.KeepAliveInterval = TimeSpan.FromSeconds(30);
+                        client.Connect(); _err = "";
+                        while (!_stop)
                         {
-                            client.ConnectionInfo.Timeout = TimeSpan.FromSeconds(8);
-                            client.KeepAliveInterval = TimeSpan.FromSeconds(30);
-                            client.Connect();
-                            _error = "";
-                            while (!_stop)
+                            var cmd = client.CreateCommand(TempCommand);
+                            cmd.CommandTimeout = TimeSpan.FromSeconds(6);
+                            string r = cmd.Execute().Trim();
+                            var list = new List<int>();
+                            foreach (string line in r.Split('\n'))
                             {
-                                SshCommand cmd = client.CreateCommand(TempCommand);
-                                cmd.CommandTimeout = TimeSpan.FromSeconds(6);
-                                string result = cmd.Execute().Trim();
-                                int milli;
-                                if (int.TryParse(result, NumberStyles.Integer, CultureInfo.InvariantCulture, out milli)
-                                    && milli > 0 && milli < 200000)
-                                    _temp = milli / 1000;
-                                else
-                                    _temp = -1;
-                                SleepInterruptible(_config.IntervalSeconds * 1000);
+                                string s = line.Trim();
+                                int m;
+                                if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out m) && m > 0 && m < 200000) list.Add(m / 1000);
                             }
+                            _temps = list.ToArray(); _ok = list.Count > 0;
+                            SleepInterruptible(_config.RemoteInterval * 1000);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        _error = ex.Message;
-                        _temp = -1;
-                        Program.Log("ssh: " + ex.Message);
-                        SleepInterruptible(5000);
-                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Program.Log("Loop fatal: " + ex);
+                catch (Exception ex) { _err = ex.Message; _ok = false; Program.Log("ssh: " + ex.Message); SleepInterruptible(5000); }
             }
         }
-
         private SshClient CreateClient()
         {
             if (string.Equals(_config.Auth, "password", StringComparison.OrdinalIgnoreCase))
                 return new SshClient(_config.Host, _config.Port, _config.User, _config.GetPassword());
-            var key = new PrivateKeyFile(_config.KeyPath);
-            return new SshClient(_config.Host, _config.Port, _config.User, key);
+            return new SshClient(_config.Host, _config.Port, _config.User, new PrivateKeyFile(_config.KeyPath));
         }
-
-        private void SleepInterruptible(int milliseconds)
-        {
-            int left = milliseconds;
-            while (left > 0 && !_stop)
-            {
-                Thread.Sleep(Math.Min(100, left));
-                left -= 100;
-            }
-        }
-
+        private void SleepInterruptible(int ms) { int l = ms; while (l > 0 && !_stop) { Thread.Sleep(Math.Min(100, l)); l -= 100; } }
         public void Dispose() { Stop(); }
     }
 
+    // 托盘
     internal sealed class TrayContext : ApplicationContext
     {
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern bool DestroyIcon(IntPtr handle);
+        private static extern bool DestroyIcon(IntPtr h);
 
         private Config _config;
         private readonly NotifyIcon _notify;
         private readonly System.Windows.Forms.Timer _timer;
-        private TempReader _reader;
-        private SettingsForm _settings;
-        private Icon _icon;
-        private int _last = -1;
-        private bool _closing;
+        private LocalTempReader _local; private RemoteTempReader _remote;
+        private SettingsForm _settings; private Icon _icon; private int _last = -1; private bool _closing;
 
         public TrayContext()
         {
             _config = Config.Load();
-            _reader = new TempReader(_config);
-            _reader.Start();
-
+            _local = new LocalTempReader(); _local.Start(_config.LocalInterval * 1000);
+            _remote = new RemoteTempReader(_config); _remote.Start();
             _icon = CreateIcon("--");
-            _notify = new NotifyIcon();
-            _notify.Icon = _icon;
-            _notify.Text = "linux-cpu温度 v1.1.0";
-            _notify.Visible = _config.ShowTrayIcon;
+            _notify = new NotifyIcon { Icon = _icon, Text = "linux-cpu温度 v1.0.0", Visible = _config.ShowTrayIcon };
             _notify.DoubleClick += delegate { OpenSettings(); };
-
             var menu = new ContextMenuStrip();
             menu.Items.Add("设置…", null, delegate { OpenSettings(); });
             menu.Items.Add("立即刷新", null, delegate { RefreshNow(); });
-            menu.Items.Add("托盘设置", null, delegate
-            {
-                try { Process.Start("ms-settings:taskbar"); } catch { }
-            });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("退出", null, delegate { ExitThread(); });
             _notify.ContextMenuStrip = menu;
-
-            _timer = new System.Windows.Forms.Timer();
-            _timer.Interval = 500;
-            _timer.Tick += OnTick;
-            _timer.Start();
+            _timer = new System.Windows.Forms.Timer { Interval = 500 };
+            _timer.Tick += OnTick; _timer.Start();
         }
 
-        private void OnTick(object sender, EventArgs e)
+        private void OnTick(object s, EventArgs e)
         {
-            int t = _reader.Temp;
-            if (t >= 0 && t != _last)
-            {
-                _last = t;
-                ReplaceIcon(t.ToString(CultureInfo.InvariantCulture), "linux-cpu " + t + "°C");
-            }
-            else if (t < 0 && _last != -2)
-            {
-                _last = -2;
-                string err = _reader.LastError;
-                string tip = string.IsNullOrEmpty(err)
-                    ? "linux-cpu温度"
-                    : "linux-cpu温度（连接失败，等待重试）";
-                ReplaceIcon("--", tip);
-            }
+            int lt = _config.ShowLocal ? _local.MaxTemp : -1;
+            int rt = _config.ShowRemote ? _remote.MaxTemp : -1;
+            int show = Math.Max(lt, rt);
+            string tip;
+            if (lt >= 0 && rt >= 0) tip = string.Format("本机 {0}°C · 远程 {1}°C", lt, rt);
+            else if (lt >= 0) tip = "本机 " + lt + "°C";
+            else if (rt >= 0) tip = "远程 " + rt + "°C";
+            else tip = "linux-cpu温度";
+            if (show >= 0 && show != _last) { _last = show; ReplaceIcon(show.ToString(CultureInfo.InvariantCulture), tip); }
+            else if (show < 0 && _last != -2) { _last = -2; ReplaceIcon("--", tip); }
         }
 
-        // 重启读取线程：立刻重建 SSH 连接并读取一次温度（不等下一轮询周期）
         private void RefreshNow()
         {
-            try
-            {
-                _reader.Stop();
-                _reader = new TempReader(_config);
-                _reader.Start();
-            }
-            catch (Exception ex)
-            {
-                Program.Log("RefreshNow: " + ex);
-            }
+            try { _local.Stop(); _local.Start(_config.LocalInterval * 1000); _remote.Stop(); _remote = new RemoteTempReader(_config); _remote.Start(); }
+            catch (Exception ex) { Program.Log("RefreshNow: " + ex); }
         }
 
         private void ReplaceIcon(string text, string tooltip)
         {
-            Icon next = CreateIcon(text);
-            Icon old = _notify.Icon;
-            _notify.Icon = next;
-            _notify.Text = tooltip;
-            _icon = next;
-            if (old != null && !ReferenceEquals(old, next))
-            {
-                try { old.Dispose(); } catch { }
-            }
+            Icon next = CreateIcon(text); Icon old = _notify.Icon;
+            _notify.Icon = next; _notify.Text = tooltip; _icon = next;
+            if (old != null && !ReferenceEquals(old, next)) try { old.Dispose(); } catch { }
         }
 
         private static Icon CreateIcon(string text)
         {
             using (var bmp = new Bitmap(16, 16))
+            using (var g = Graphics.FromImage(bmp))
             {
-                using (var g = Graphics.FromImage(bmp))
+                g.Clear(Color.Transparent);
+                g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+                g.SmoothingMode = SmoothingMode.None;
+                using (var font = new Font("Tahoma", 8f))
+                using (var brush = new SolidBrush(Color.Black))
+                using (var sf = new StringFormat())
                 {
-                    g.Clear(Color.Transparent);
-                    g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
-                    g.SmoothingMode = SmoothingMode.None;
-                    using (var font = new Font("Tahoma", 8f, FontStyle.Regular, GraphicsUnit.Point))
-                    using (var brush = new SolidBrush(Color.Black))
-                    using (var sf = new StringFormat())
-                    {
-                        sf.Alignment = StringAlignment.Center;
-                        sf.LineAlignment = StringAlignment.Center;
-                        sf.FormatFlags = StringFormatFlags.NoClip;
-                        g.DrawString(text, font, brush, new RectangleF(0, 0, 16, 16), sf);
-                    }
+                    sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; sf.FormatFlags = StringFormatFlags.NoClip;
+                    g.DrawString(text, font, brush, new RectangleF(0, 0, 16, 16), sf);
                 }
                 IntPtr h = bmp.GetHicon();
-                try
-                {
-                    using (Icon tmp = Icon.FromHandle(h))
-                        return (Icon)tmp.Clone();
-                }
-                finally
-                {
-                    DestroyIcon(h);
-                }
+                try { using (var tmp = Icon.FromHandle(h)) return (Icon)tmp.Clone(); }
+                finally { DestroyIcon(h); }
             }
         }
 
@@ -445,370 +388,348 @@ done
             if (_closing) return;
             try
             {
-                if (_settings != null && !_settings.IsDisposed)
-                {
-                    _settings.Activate();
-                    return;
-                }
-                _settings = new SettingsForm(_config);
-                _settings.FormClosed += delegate
-                {
-                    _settings = null;
-                    ReloadConfig();
-                };
-                _settings.Show();
-                _settings.Activate();
+                if (_settings != null && !_settings.IsDisposed) { _settings.Activate(); return; }
+                _settings = new SettingsForm(_config, _local, _remote);
+                _settings.FormClosed += delegate { _settings = null; ReloadConfig(); };
+                _settings.Show(); _settings.Activate();
             }
-            catch (Exception ex)
-            {
-                Program.Log("OpenSettings: " + ex);
-            }
+            catch (Exception ex) { Program.Log("OpenSettings: " + ex); }
         }
 
         private void ReloadConfig()
         {
             _config = Config.Load();
-            _reader.Stop();
-            _reader = new TempReader(_config);
-            _reader.Start();
-            _notify.Visible = _config.ShowTrayIcon;
-            _last = -1;
+            _local.Stop(); _local = new LocalTempReader(); _local.Start(_config.LocalInterval * 1000);
+            _remote.Stop(); _remote = new RemoteTempReader(_config); _remote.Start();
+            _notify.Visible = _config.ShowTrayIcon; _last = -1;
         }
 
         protected override void ExitThreadCore()
         {
             _closing = true;
             try { _timer.Stop(); } catch { }
-            try { _reader.Dispose(); } catch { }
+            try { _local.Dispose(); _remote.Dispose(); } catch { }
             try { _notify.Visible = false; _notify.Dispose(); } catch { }
             try { if (_icon != null) _icon.Dispose(); } catch { }
             base.ExitThreadCore();
         }
     }
 
+    // ============ 自绘橙色 ToggleSwitch（参考 Freon 风格） ============
+    internal sealed class ToggleSwitch : Control
+    {
+        private bool _checked;
+        public bool Checked
+        {
+            get { return _checked; }
+            set { _checked = value; Invalidate(); }
+        }
+        public event EventHandler CheckedChanged;
+
+        public ToggleSwitch()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Size = new Size(46, 24);
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnClick(EventArgs e)
+        {
+            _checked = !_checked;
+            Invalidate();
+            if (CheckedChanged != null) CheckedChanged(this, e);
+            base.OnClick(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int w = Width, h = Height;
+            int r = h / 2;
+            // 轨道
+            var trackColor = _checked ? Color.FromArgb(232, 93, 38) : Color.FromArgb(200, 200, 200);
+            using (var brush = new SolidBrush(trackColor))
+            using (var path = RoundedRect(0, 0, w - 1, h - 1, r))
+                g.FillPath(brush, path);
+            // 圆头
+            int knobD = h - 4;
+            int knobX = _checked ? (w - knobD - 2) : 2;
+            using (var brush = new SolidBrush(Color.White))
+                g.FillEllipse(brush, knobX, 2, knobD, knobD);
+        }
+
+        private static GraphicsPath RoundedRect(int x, int y, int w, int h, int r)
+        {
+            var p = new GraphicsPath();
+            p.AddArc(x, y, r * 2, r * 2, 180, 90);
+            p.AddArc(x + w - r * 2, y, r * 2, r * 2, 270, 90);
+            p.AddArc(x + w - r * 2, y + h - r * 2, r * 2, r * 2, 0, 90);
+            p.AddArc(x, y + h - r * 2, r * 2, r * 2, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    // ============ 三列设置窗口（Freon 风格） ============
     internal sealed class SettingsForm : Form
     {
         private readonly Config _config;
-        private readonly TextBox _host;
-        private readonly NumericUpDown _port;
-        private readonly TextBox _user;
-        private readonly RadioButton _rbKey;
-        private readonly RadioButton _rbPassword;
-        private readonly TextBox _keyPath;
-        private readonly Button _browse;
-        private readonly TextBox _password;
-        private readonly NumericUpDown _interval;
-        private readonly CheckBox _autostart;
-        private readonly Label _status;
+        private readonly LocalTempReader _local;
+        private readonly RemoteTempReader _remote;
 
-        public SettingsForm(Config config)
+        // 颜色（参考 Freon）
+        private static readonly Color TextMain = Color.FromArgb(45, 45, 45);
+        private static readonly Color TextSub = Color.FromArgb(140, 140, 140);
+        private static readonly Color Divider = Color.FromArgb(235, 235, 235);
+
+        private NumericUpDown _localInterval, _remoteInterval, _port;
+        private RadioButton _localAvg, _localMax, _remoteAvg, _remoteMax;
+        private TextBox _host, _user, _keyPath, _password;
+        private Button _browse;
+        private ToggleSwitch _showLocal, _showRemote;
+        private Label _localTemps, _remoteTemps;
+        private System.Windows.Forms.Timer _refreshTimer;
+
+        public SettingsForm(Config config, LocalTempReader local, RemoteTempReader remote)
         {
-            _config = config;
+            _config = config; _local = local; _remote = remote;
 
-            Text = "linux-cpu温度设置";
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            Text = "linux-cpu温度";
+            FormBorderStyle = FormBorderStyle.FixedSingle;
             StartPosition = FormStartPosition.CenterScreen;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            TopMost = true;
-            ClientSize = new Size(500, 470);
-            Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular, GraphicsUnit.Point);
+            MaximizeBox = false; MinimizeBox = false; TopMost = true;
+            ClientSize = new Size(900, 540);
+            BackColor = Color.White;
+            Font = new Font("Microsoft YaHei UI", 9f);
 
-            // 品牌行：左 名称+版本，右 TXH
-            var brandLeft = new Label();
-            brandLeft.Text = "linux-cpu温度 v1.1.0";
-            brandLeft.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold, GraphicsUnit.Point);
-            brandLeft.AutoSize = true;
-            brandLeft.Location = new Point(20, 10);
-            Controls.Add(brandLeft);
-
-            var brandRight = new Label();
-            brandRight.Text = "TXH";
-            brandRight.Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold, GraphicsUnit.Point);
-            brandRight.TextAlign = ContentAlignment.MiddleRight;
-            brandRight.Size = new Size(40, 26);
-            brandRight.Location = new Point(440, 8);
-            brandRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            Controls.Add(brandRight);
-
-            AddLabel("主机", 20, 53);
-            _host = AddText(config.Host, 100, 50, 180);
-            AddLabel("端口", 300, 53);
-            _port = new NumericUpDown();
-            _port.Minimum = 1;
-            _port.Maximum = 65535;
-            _port.Value = config.Port;
-            _port.Location = new Point(395, 50);
-            _port.Size = new Size(70, 25);
-            Controls.Add(_port);
-
-            AddLabel("用户名", 20, 88);
-            _user = AddText(config.User, 100, 85, 240);
-
-            var grp = new GroupBox();
-            grp.Text = "SSH 认证";
-            grp.Location = new Point(20, 120);
-            grp.Size = new Size(460, 130);
-            Controls.Add(grp);
-
-            _rbKey = new RadioButton();
-            _rbKey.Text = "使用密钥文件";
-            _rbKey.Location = new Point(15, 25);
-            _rbKey.Size = new Size(120, 24);
-            _rbKey.Checked = config.Auth != "password";
-            grp.Controls.Add(_rbKey);
-
-            _keyPath = new TextBox();
-            _keyPath.Text = config.KeyPath;
-            _keyPath.Location = new Point(140, 24);
-            _keyPath.Size = new Size(230, 25);
-            grp.Controls.Add(_keyPath);
-
-            _browse = new Button();
-            _browse.Text = "浏览…";
-            _browse.Location = new Point(378, 22);
-            _browse.Size = new Size(66, 28);
-            _browse.Click += delegate { BrowseKey(); };
-            grp.Controls.Add(_browse);
-
-            _rbPassword = new RadioButton();
-            _rbPassword.Text = "使用密码";
-            _rbPassword.Location = new Point(15, 60);
-            _rbPassword.Size = new Size(120, 24);
-            _rbPassword.Checked = config.Auth == "password";
-            grp.Controls.Add(_rbPassword);
-
-            _password = new TextBox();
-            _password.UseSystemPasswordChar = true;
-            _password.Location = new Point(140, 59);
-            _password.Size = new Size(230, 25);
-            _password.Text = config.GetPassword();
-            grp.Controls.Add(_password);
-
-            var note = new Label();
-            note.Text = "密码用当前 Windows 用户的 DPAPI 加密保存";
-            note.ForeColor = Color.Gray;
-            note.Location = new Point(15, 95);
-            note.Size = new Size(430, 20);
-            grp.Controls.Add(note);
-
-            _rbKey.CheckedChanged += delegate { UpdateAuth(); };
-            _rbPassword.CheckedChanged += delegate { UpdateAuth(); };
-            UpdateAuth();
-
-            AddLabel("刷新间隔(秒)", 20, 265);
-            _interval = new NumericUpDown();
-            _interval.Minimum = 1;
-            _interval.Maximum = 60;
-            _interval.Value = config.IntervalSeconds;
-            _interval.Location = new Point(130, 262);
-            _interval.Size = new Size(60, 25);
-            Controls.Add(_interval);
-
-            var btnTray = new Button();
-            btnTray.Text = "托盘设置";
-            btnTray.Location = new Point(380, 259);
-            btnTray.Size = new Size(100, 28);
-            btnTray.Click += delegate
+            // 顶部标题居中
+            var title = new Label
             {
-                try { Process.Start("ms-settings:taskbar"); } catch { }
+                Text = "linux-cpu温度 v1.0.0",
+                Font = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold),
+                ForeColor = TextMain,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Location = new Point(0, 12),
+                Size = new Size(900, 26)
             };
-            Controls.Add(btnTray);
+            Controls.Add(title);
 
-            _autostart = new CheckBox();
-            _autostart.Text = "随系统启动";
-            _autostart.Checked = Autostart.IsEnabled();
-            _autostart.Location = new Point(20, 295);
-            _autostart.Size = new Size(160, 24);
-            Controls.Add(_autostart);
+            BuildLeftColumn();
+            BuildMidColumn();
+            BuildRightColumn();
 
-            var hideNote = new Label();
-            hideNote.Text = "显示/隐藏图标：托盘设置 → 其他系统托盘图标";
-            hideNote.ForeColor = Color.Gray;
-            hideNote.Location = new Point(220, 295);
-            hideNote.Size = new Size(260, 24);
-            Controls.Add(hideNote);
-
-            var support = new Label();
-            support.Text = "支持任意 Linux：读取 /sys/class/thermal 或 hwmon（coretemp / k10temp / zenpower）";
-            support.ForeColor = Color.Gray;
-            support.Location = new Point(20, 325);
-            support.Size = new Size(460, 22);
-            Controls.Add(support);
-
-            var btnTest = new Button();
-            btnTest.Text = "测试连接";
-            btnTest.Location = new Point(20, 360);
-            btnTest.Size = new Size(100, 32);
-            btnTest.Click += delegate { TestConnection(); };
-            Controls.Add(btnTest);
-
-            var btnSave = new Button();
-            btnSave.Text = "保存";
-            btnSave.Location = new Point(140, 360);
-            btnSave.Size = new Size(100, 32);
+            // 底部按钮
+            var btnCancel = MakeButton("取消", 620, 498);
+            btnCancel.Click += delegate { Close(); };
+            Controls.Add(btnCancel);
+            var btnSave = MakeButton("保存", 760, 498);
             btnSave.Click += delegate { SaveSettings(); };
             Controls.Add(btnSave);
 
-            var btnCancel = new Button();
-            btnCancel.Text = "取消";
-            btnCancel.Location = new Point(260, 360);
-            btnCancel.Size = new Size(100, 32);
-            btnCancel.Click += delegate { Close(); };
-            Controls.Add(btnCancel);
+            AcceptButton = btnSave; CancelButton = btnCancel;
 
-            var btnExit = new Button();
-            btnExit.Text = "退出程序";
-            btnExit.Location = new Point(380, 360);
-            btnExit.Size = new Size(100, 32);
-            btnExit.Click += delegate { Application.Exit(); };
-            Controls.Add(btnExit);
-
-            _status = new Label();
-            _status.ForeColor = Color.Gray;
-            _status.Location = new Point(20, 410);
-            _status.Size = new Size(460, 24);
-            Controls.Add(_status);
-
-            AcceptButton = btnSave;
-            CancelButton = btnCancel;
+            _refreshTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _refreshTimer.Tick += delegate { UpdateTempLabels(); };
+            _refreshTimer.Start();
+            UpdateTempLabels();
         }
 
-        private void AddLabel(string text, int x, int y)
+        // ---- 一行设置项容器：标签左，控件右，底部分隔线 ----
+        private Panel MakeRow(int x, int y, string label, int w)
         {
-            var label = new Label();
-            label.Text = text;
-            label.Location = new Point(x, y);
-            label.Size = new Size(80, 24);
-            Controls.Add(label);
+            var p = new Panel { Location = new Point(x, y), Size = new Size(w, 44), BackColor = Color.White };
+            var l = new Label { Text = label, Location = new Point(16, 0), Size = new Size(w - 100, 44), ForeColor = TextMain, TextAlign = ContentAlignment.MiddleLeft, BackColor = Color.White };
+            p.Controls.Add(l);
+            var line = new Panel { Location = new Point(16, 43), Size = new Size(w - 32, 1), BackColor = Divider };
+            p.Controls.Add(line);
+            return p;
         }
 
-        private TextBox AddText(string text, int x, int y, int width)
+        private void BuildLeftColumn()
         {
-            var box = new TextBox();
-            box.Text = text;
-            box.Location = new Point(x, y);
-            box.Size = new Size(width, 25);
-            Controls.Add(box);
-            return box;
+            var h1 = new Label { Text = "显示选项", Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold), ForeColor = TextMain, Location = new Point(20, 50), AutoSize = true };
+            Controls.Add(h1);
+
+            int y = 80;
+            var row1 = MakeRow(20, y, "本机刷新间隔(秒)", 280);
+            _localInterval = new NumericUpDown { Minimum = 1, Maximum = 60, Value = _config.LocalInterval, Location = new Point(220, 10), Size = new Size(50, 25) };
+            row1.Controls.Add(_localInterval);
+            Controls.Add(row1); y += 44;
+
+            var row2 = MakeRow(20, y, "远程刷新间隔(秒)", 280);
+            _remoteInterval = new NumericUpDown { Minimum = 1, Maximum = 60, Value = _config.RemoteInterval, Location = new Point(220, 10), Size = new Size(50, 25) };
+            row2.Controls.Add(_remoteInterval);
+            Controls.Add(row2); y += 44;
+
+            var row3 = MakeRow(20, y, "本机温度类型", 280);
+            _localAvg = new RadioButton { Text = "平均", Location = new Point(185, 12), AutoSize = true, Checked = _config.LocalMode != "max" };
+            _localMax = new RadioButton { Text = "最高", Location = new Point(235, 12), AutoSize = true, Checked = _config.LocalMode == "max" };
+            row3.Controls.Add(_localAvg); row3.Controls.Add(_localMax);
+            Controls.Add(row3); y += 44;
+
+            var row4 = MakeRow(20, y, "远程温度类型", 280);
+            _remoteAvg = new RadioButton { Text = "平均", Location = new Point(185, 12), AutoSize = true, Checked = _config.RemoteMode != "max" };
+            _remoteMax = new RadioButton { Text = "最高", Location = new Point(235, 12), AutoSize = true, Checked = _config.RemoteMode == "max" };
+            row4.Controls.Add(_remoteAvg); row4.Controls.Add(_remoteMax);
+            Controls.Add(row4);
         }
 
-        private void UpdateAuth()
+        private void BuildMidColumn()
         {
-            bool key = _rbKey.Checked;
-            _keyPath.Enabled = key;
-            _browse.Enabled = key;
-            _password.Enabled = !key;
+            var h2 = new Label { Text = "传感器提供程序", Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold), ForeColor = TextMain, Location = new Point(320, 50), AutoSize = true };
+            Controls.Add(h2);
+
+            // 远程 SSH 主机卡片
+            var card = new Panel { Location = new Point(320, 80), Size = new Size(280, 330), BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+            Controls.Add(card);
+
+            var cardTitle = new Label { Text = "远程 SSH 主机", Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold), ForeColor = TextMain, Location = new Point(16, 12), AutoSize = true };
+            card.Controls.Add(cardTitle);
+
+            int y = 44;
+            AddInputRow(card, "主机 IP/域名", ref _host, _config.Host, ref y, 18);
+            AddInputRow(card, "SSH 用户名", ref _user, _config.User, ref y, 18);
+            AddInputRow(card, "端口", ref _port, _config.Port, ref y, 18, true);
+
+            // 密钥路径 + 浏览按钮
+            AddDividerRow(card, ref y);
+            var lblKey = new Label { Text = "密钥路径(可选)", ForeColor = TextMain, Location = new Point(16, y + 8), Size = new Size(100, 20), BackColor = Color.White };
+            card.Controls.Add(lblKey);
+            _keyPath = new TextBox { Text = _config.KeyPath, Location = new Point(16, y + 30), Size = new Size(180, 25), BorderStyle = BorderStyle.FixedSingle };
+            card.Controls.Add(_keyPath);
+            _browse = new Button { Text = "浏览…", Location = new Point(202, y + 29), Size = new Size(66, 27), FlatStyle = FlatStyle.Flat };
+            _browse.FlatAppearance.BorderSize = 1;
+            _browse.Click += delegate { BrowseKey(); };
+            card.Controls.Add(_browse);
+            y += 68;
+
+            // 密码
+            var lblPwd = new Label { Text = "密码(可选)", ForeColor = TextMain, Location = new Point(16, y + 8), Size = new Size(100, 20), BackColor = Color.White };
+            card.Controls.Add(lblPwd);
+            _password = new TextBox { UseSystemPasswordChar = true, Text = _config.GetPassword(), Location = new Point(16, y + 30), Size = new Size(254, 25), BorderStyle = BorderStyle.FixedSingle };
+            card.Controls.Add(_password);
+        }
+
+        private void AddInputRow(Panel parent, string label, ref TextBox box, string val, ref int y, int top)
+        {
+            var l = new Label { Text = label, ForeColor = TextMain, Location = new Point(16, y + top), Size = new Size(120, 20), BackColor = Color.White };
+            parent.Controls.Add(l);
+            box = new TextBox { Text = val, Location = new Point(16, y + top + 22), Size = new Size(254, 25), BorderStyle = BorderStyle.FixedSingle };
+            parent.Controls.Add(box);
+            y += 52;
+        }
+        private void AddInputRow(Panel parent, string label, ref NumericUpDown box, int val, ref int y, int top, bool isNum)
+        {
+            var l = new Label { Text = label, ForeColor = TextMain, Location = new Point(16, y + top), Size = new Size(120, 20), BackColor = Color.White };
+            parent.Controls.Add(l);
+            box = new NumericUpDown { Minimum = 1, Maximum = 65535, Value = val, Location = new Point(16, y + top + 22), Size = new Size(80, 25) };
+            parent.Controls.Add(box);
+            y += 52;
+        }
+        private void AddDividerRow(Panel parent, ref int y)
+        {
+            var line = new Panel { Location = new Point(16, y), Size = new Size(248, 1), BackColor = Divider };
+            parent.Controls.Add(line);
+            y += 10;
+        }
+
+        private void BuildRightColumn()
+        {
+            var h3 = new Label { Text = "显示传感器", Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold), ForeColor = TextMain, Location = new Point(630, 50), AutoSize = true };
+            Controls.Add(h3);
+
+            var row1 = MakeRow(630, 80, "本机温度", 250);
+            _showLocal = new ToggleSwitch { Checked = _config.ShowLocal, Location = new Point(195, 10) };
+            row1.Controls.Add(_showLocal);
+            Controls.Add(row1);
+
+            var row2 = MakeRow(630, 124, "远程温度", 250);
+            _showRemote = new ToggleSwitch { Checked = _config.ShowRemote, Location = new Point(195, 10) };
+            row2.Controls.Add(_showRemote);
+            Controls.Add(row2);
+
+            var h4 = new Label { Text = "当前各核温度", Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold), ForeColor = TextMain, Location = new Point(630, 180), AutoSize = true };
+            Controls.Add(h4);
+
+            _localTemps = new Label { Location = new Point(630, 210), Size = new Size(260, 90), ForeColor = TextMain, Font = new Font("Microsoft YaHei UI", 9f), BackColor = Color.White };
+            Controls.Add(_localTemps);
+
+            _remoteTemps = new Label { Location = new Point(630, 310), Size = new Size(260, 110), ForeColor = TextMain, Font = new Font("Microsoft YaHei UI", 9f), BackColor = Color.White };
+            Controls.Add(_remoteTemps);
+        }
+
+        private static Button MakeButton(string text, int x, int y)
+        {
+            return new Button
+            {
+                Text = text, Location = new Point(x, y), Size = new Size(120, 34),
+                FlatStyle = FlatStyle.Flat, BackColor = Color.White,
+                Font = new Font("Microsoft YaHei UI", 9.5f)
+            };
         }
 
         private void BrowseKey()
         {
-            using (var dialog = new OpenFileDialog())
+            using (var dlg = new OpenFileDialog())
             {
-                dialog.Filter = "所有文件|*.*";
-                dialog.InitialDirectory = Program.BaseDir;
-                if (dialog.ShowDialog(this) == DialogResult.OK)
-                    _keyPath.Text = dialog.FileName;
+                dlg.Filter = "密钥文件|*.*";
+                dlg.InitialDirectory = Program.BaseDir;
+                if (dlg.ShowDialog(this) == DialogResult.OK) _keyPath.Text = dlg.FileName;
             }
         }
 
-        private bool ApplyToConfig()
+        private void UpdateTempLabels()
+        {
+            _localTemps.Text = FormatTemps("本机", _local.Temps, _local.Ok);
+            _remoteTemps.Text = FormatTemps("远程", _remote.Temps, _remote.Ok);
+        }
+
+        private static string FormatTemps(string prefix, int[] temps, bool ok)
+        {
+            if (!ok || temps == null || temps.Length == 0) return prefix + "：—";
+            var sb = new StringBuilder();
+            sb.Append(prefix).Append("：");
+            for (int i = 0; i < temps.Length; i++)
+            {
+                if (i > 0) sb.Append(i % 3 == 0 ? "\n" : "  ");
+                sb.Append("Core").Append(i).Append(' ').Append(temps[i]).Append("°C");
+            }
+            return sb.ToString();
+        }
+
+        private void SaveSettings()
         {
             string host = _host.Text.Trim();
             string user = _user.Text.Trim();
             if (host.Length == 0 || user.Length == 0)
             {
-                MessageBox.Show(this, "主机和用户名不能为空。", "linux-cpu温度设置");
-                return false;
+                MessageBox.Show(this, "主机和用户名不能为空。", "linux-cpu温度");
+                return;
             }
-            if (_rbKey.Checked)
+            string key = _keyPath.Text.Trim();
+            if (!string.IsNullOrEmpty(key) && !File.Exists(key))
             {
-                string key = _keyPath.Text.Trim();
-                if (key.Length == 0 || !File.Exists(key))
-                {
-                    MessageBox.Show(this, "密钥文件不存在。", "linux-cpu温度设置");
-                    return false;
-                }
-            }
-            else if (_password.Text.Length == 0 && _config.PasswordEnc.Length == 0)
-            {
-                MessageBox.Show(this, "请输入 SSH 密码。", "linux-cpu温度设置");
-                return false;
+                MessageBox.Show(this, "密钥文件不存在：" + key, "linux-cpu温度");
+                return;
             }
 
             _config.Host = host;
             _config.Port = (int)_port.Value;
             _config.User = user;
-            _config.Auth = _rbKey.Checked ? "key" : "password";
-            if (_rbKey.Checked) _config.KeyPath = _keyPath.Text.Trim();
+            _config.KeyPath = key;
             if (_password.Text.Length > 0) _config.SetPassword(_password.Text);
-            _config.IntervalSeconds = (int)_interval.Value;
-            return true;
-        }
+            _config.Auth = string.IsNullOrEmpty(key) ? "password" : "key";
+            _config.LocalInterval = (int)_localInterval.Value;
+            _config.RemoteInterval = (int)_remoteInterval.Value;
+            _config.LocalMode = _localMax.Checked ? "max" : "avg";
+            _config.RemoteMode = _remoteMax.Checked ? "max" : "avg";
+            _config.ShowLocal = _showLocal.Checked;
+            _config.ShowRemote = _showRemote.Checked;
 
-        private void SaveSettings()
-        {
-            if (!ApplyToConfig()) return;
-            try
-            {
-                _config.Save();
-                Autostart.Set(_autostart.Checked);
-                DialogResult = DialogResult.OK;
-                Close();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, "保存失败: " + ex.Message, "linux-cpu温度设置");
-            }
-        }
-
-        private void TestConnection()
-        {
-            string host = _host.Text.Trim();
-            string user = _user.Text.Trim();
-            int port = (int)_port.Value;
-            if (host.Length == 0 || user.Length == 0)
-            {
-                MessageBox.Show(this, "主机和用户名不能为空。", "测试连接");
-                return;
-            }
-
-            Cursor previous = Cursor;
-            Cursor = Cursors.WaitCursor;
-            _status.Text = "正在连接 " + host + " …";
-            try
-            {
-                using (SshClient client = CreateTestClient(host, port, user))
-                {
-                    client.ConnectionInfo.Timeout = TimeSpan.FromSeconds(8);
-                    client.Connect();
-                    SshCommand cmd = client.CreateCommand("echo ok");
-                    cmd.CommandTimeout = TimeSpan.FromSeconds(6);
-                    string result = cmd.Execute().Trim();
-                    _status.Text = "连接成功";
-                    MessageBox.Show(this, "连接成功，返回: " + result, "测试连接");
-                }
-            }
-            catch (Exception ex)
-            {
-                _status.Text = "连接失败";
-                MessageBox.Show(this, "连接失败:\r\n" + ex.Message, "测试连接");
-            }
-            finally
-            {
-                Cursor = previous;
-            }
-        }
-
-        private SshClient CreateTestClient(string host, int port, string user)
-        {
-            if (_rbKey.Checked)
-            {
-                var key = new PrivateKeyFile(_keyPath.Text.Trim());
-                return new SshClient(host, port, user, key);
-            }
-            string password = _password.Text.Length > 0 ? _password.Text : _config.GetPassword();
-            return new SshClient(host, port, user, password);
+            try { _config.Save(); DialogResult = DialogResult.OK; Close(); }
+            catch (Exception ex) { MessageBox.Show(this, "保存失败: " + ex.Message, "linux-cpu温度"); }
         }
     }
 }

@@ -254,6 +254,9 @@ export default class LinuxTempExtension extends Extension {
         brandR.x_align = Clutter.ActorAlign.END;
         brand.add_child(brandL);
         brand.add_child(brandR);
+        const closeBtn = new St.Button({label: '×', can_focus: true, style_class: 'fnos-close'});
+        closeBtn.connect('clicked', () => dialog.close());
+        brand.add_child(closeBtn);
         root.add_child(brand);
 
         const cols = new St.BoxLayout({vertical: false, style_class: 'fnos-cols'});
@@ -304,11 +307,29 @@ export default class LinuxTempExtension extends Extension {
             };
         };
 
+        const mkSpin = (col, label, init) => {
+            let val = Math.max(1, parseInt(init, 10) || 5);
+            const row = new St.BoxLayout({vertical: false, style_class: 'fnos-row'});
+            const lab = new St.Label({text: label, style_class: 'fnos-label'});
+            lab.y_align = Clutter.ActorAlign.CENTER;
+            const minus = new St.Button({label: '−', can_focus: true, style_class: 'fnos-step'});
+            const valLab = new St.Label({text: String(val), style_class: 'fnos-stepval'});
+            const plus = new St.Button({label: '+', can_focus: true, style_class: 'fnos-step'});
+            minus.connect('clicked', () => { if (val > 1) { val -= 1; valLab.set_text(String(val)); } });
+            plus.connect('clicked', () => { if (val < 999) { val += 1; valLab.set_text(String(val)); } });
+            row.add_child(lab);
+            row.add_child(minus);
+            row.add_child(valLab);
+            row.add_child(plus);
+            col.add_child(row);
+            return () => String(val);
+        };
+
         // 列1：显示选项
         const colD = mkCol('显示选项');
         cols.add_child(colD);
-        const eLocalIv = mkEntry(colD, '本机刷新间隔(秒)', cfg.localInterval);
-        const eRemoteIv = mkEntry(colD, '远程刷新间隔(秒)', cfg.remoteInterval);
+        const getLocalIv = mkSpin(colD, '本机刷新间隔(秒)', cfg.localInterval);
+        const getRemoteIv = mkSpin(colD, '远程刷新间隔(秒)', cfg.remoteInterval);
         const setLocalType = mkType(colD, '本机温度类型', (t) => { localType = t; });
         setLocalType(localType);
         const setRemoteType = mkType(colD, '远程温度类型', (t) => { remoteType = t; });
@@ -358,8 +379,8 @@ export default class LinuxTempExtension extends Extension {
                     key: eKey.get_text().trim(),
                     password: ePass.get_text(),
                     interval: cfg.interval || '5',
-                    localInterval: eLocalIv.get_text().trim() || '5',
-                    remoteInterval: eRemoteIv.get_text().trim() || '5',
+                    localInterval: getLocalIv(),
+                    remoteInterval: getRemoteIv(),
                     showLocal: getShowLocal() ? 'true' : 'false',
                     localType,
                     showRemote: getShowRemote() ? 'true' : 'false',
