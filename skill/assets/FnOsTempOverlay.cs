@@ -511,7 +511,7 @@ done
             MaximizeBox = false;
             MinimizeBox = false;
             TopMost = true;
-            ClientSize = new Size(600, 470);
+            ClientSize = new Size(540, 470);
             Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular, GraphicsUnit.Point);
 
             // 品牌行：左 名称+版本，右 TXH
@@ -532,13 +532,13 @@ done
             Controls.Add(brandRight);
 
             AddLabel("主机", 20, 53);
-            _host = AddText(config.Host, 100, 50, 180);
-            AddLabel("端口", 300, 53);
+            _host = AddText(config.Host, 100, 50, 220);
+            AddLabel("端口", 330, 53);
             _port = new NumericUpDown();
             _port.Minimum = 1;
             _port.Maximum = 65535;
             _port.Value = config.Port;
-            _port.Location = new Point(395, 50);
+            _port.Location = new Point(420, 50);
             _port.Size = new Size(70, 25);
             Controls.Add(_port);
 
