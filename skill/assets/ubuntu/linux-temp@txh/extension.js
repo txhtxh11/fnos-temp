@@ -300,10 +300,10 @@ export default class LinuxTempExtension extends Extension {
     }
 
     // Ubuntu 系统设置界面风格：左导航 + 右侧分组表单
-    _openSettings() {
+    async _openSettings() {
         if (this._dialog) { this._dialog.close(); return; }
         const cfg = readConfig();
-        const cores = readLocalCores();
+        const cores = await readLocalCores();
         const remoteCores = this._lastRemote || [];
         let localType = cfg.localType === 'max' ? 'max' : 'avg';
         let remoteType = cfg.remoteType === 'max' ? 'max' : 'avg';
