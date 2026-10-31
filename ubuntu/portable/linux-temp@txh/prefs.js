@@ -83,6 +83,7 @@ function mkType(label, cur) {
 function mkEntry(label) {
     const l = new Gtk.Label({ label, halign: Gtk.Align.START, xalign: 0 });
     const e = new Gtk.Entry();
+    e.set_hexpand(true);
     return { box: [l, e], entry: e };
 }
 function mkSwitch(label, on) {
@@ -99,11 +100,11 @@ export default class Prefs {
         const cfg = readConfig();
         const root = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 10,
                                    margin_top: 14, margin_bottom: 14, margin_start: 18, margin_end: 18 });
-        const cols = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 30 });
+        const cols = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 16 });
         root.append(cols);
 
         // 列1 显示选项
-        const col1 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6 });
+        const col1 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6, hexpand: true });
         col1.append(mkTitle('显示选项'));
         const lIv = mkSpin('本机刷新间隔(秒)', cfg.localInterval); col1.append(lIv.box);
         const rIv = mkSpin('远程刷新间隔(秒)', cfg.remoteInterval); col1.append(rIv.box);
@@ -112,7 +113,7 @@ export default class Prefs {
         cols.append(col1);
 
         // 列2 传感器提供程序
-        const col2 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6 });
+        const col2 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6, hexpand: true });
         col2.append(mkTitle('传感器提供程序'));
         const eHost = mkEntry('远程主机 IP'); col2.append(eHost.box[0]); col2.append(eHost.box[1]); eHost.entry.set_text(cfg.host);
         const eUser = mkEntry('用户名'); col2.append(eUser.box[0]); col2.append(eUser.box[1]); eUser.entry.set_text(cfg.user);
@@ -135,7 +136,7 @@ export default class Prefs {
         cols.append(col2);
 
         // 列3 显示传感器
-        const col3 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6 });
+        const col3 = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 6, hexpand: true });
         col3.append(mkTitle('显示传感器'));
         const swL = mkSwitch('本机温度', cfg.showLocal); col3.append(swL.box);
         const swR = mkSwitch('远程温度', cfg.showRemote); col3.append(swR.box);
