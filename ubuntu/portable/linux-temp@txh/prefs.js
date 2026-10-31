@@ -72,9 +72,6 @@ export default class Prefs {
         const cfg = readConfig();
         const root = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL, spacing: 10,
                                    margin_top: 14, margin_bottom: 14, margin_start: 18, margin_end: 18 });
-        const brand = new Gtk.Label({ label: 'linux-cpu温度 v1.0.0 / TXH', halign: Gtk.Align.START, xalign: 0 });
-        brand.add_css_class('title-4');
-        root.append(brand);
         const cols = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 30 });
         root.append(cols);
 
@@ -146,7 +143,9 @@ export default class Prefs {
         bar.append(bReset); bar.append(bSave);
         root.append(bar);
         const page = new Adw.PreferencesPage();
-        page.add(root);
+        const group = new Adw.PreferencesGroup({ title: 'linux-cpu温度 v1.0.0 / TXH' });
+        group.add(root);
+        page.add(group);
         window.add(page);
     }
 }

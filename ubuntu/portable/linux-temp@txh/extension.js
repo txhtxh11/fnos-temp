@@ -404,7 +404,7 @@ export default class LinuxTempExtension extends Extension {
             try {
                 const en = Gio.File.new_for_path(cur).enumerate_children('standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
                 let info;
-                while ((info = en.next_file(null, null))) {
+                while ((info = en.next_file(null))) {
                     const name = info.get_name();
                     const isDir = info.get_file_type() === Gio.FileType.DIRECTORY;
                     const full = cur + '/' + name;
