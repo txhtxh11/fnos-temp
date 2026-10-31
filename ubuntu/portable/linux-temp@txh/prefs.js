@@ -16,7 +16,23 @@ function readConfig() {
             for (const b of bytes) s += String.fromCharCode(b);
             for (const line of s.split('\n')) {
                 const i = line.indexOf('=');
-                if (i > 0) cfg[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+                if (i > 0) {
+                    const k = line.slice(0, i).trim();
+                    const v = line.slice(i + 1).trim();
+                    if (k === 'FNOS_HOST') cfg.host = v;
+                    else if (k === 'FNOS_USER') cfg.user = v;
+                    else if (k === 'FNOS_PORT') cfg.port = v || '22';
+                    else if (k === 'FNOS_KEY') cfg.key = v;
+                    else if (k === 'FNOS_PASSWORD') cfg.password = v;
+                    else if (k === 'INTERVAL') cfg.interval = v;
+                    else if (k === 'LOCAL_INTERVAL') cfg.localInterval = v;
+                    else if (k === 'REMOTE_INTERVAL') cfg.remoteInterval = v;
+                    else if (k === 'SHOW_LOCAL') cfg.showLocal = v;
+                    else if (k === 'LOCAL_TEMP_TYPE') cfg.localType = v;
+                    else if (k === 'SHOW_REMOTE') cfg.showRemote = v;
+                    else if (k === 'REMOTE_TEMP_TYPE') cfg.remoteType = v;
+                    else cfg[k] = v;
+                }
             }
         }
     } catch (e) { log('read err ' + e); }
@@ -24,7 +40,18 @@ function readConfig() {
 }
 function writeConfig(cfg) {
     let s = '';
-    for (const k of Object.keys(cfg)) s += `${k}=${cfg[k]}\n`;
+    s += `FNOS_HOST=${cfg.host}\n`;
+    s += `FNOS_USER=${cfg.user}\n`;
+    s += `FNOS_PORT=${cfg.port || '22'}\n`;
+    s += `FNOS_KEY=${cfg.key}\n`;
+    s += `FNOS_PASSWORD=${cfg.password}\n`;
+    s += `INTERVAL=${cfg.interval || '5'}\n`;
+    s += `LOCAL_INTERVAL=${cfg.localInterval}\n`;
+    s += `REMOTE_INTERVAL=${cfg.remoteInterval}\n`;
+    s += `SHOW_LOCAL=${cfg.showLocal}\n`;
+    s += `LOCAL_TEMP_TYPE=${cfg.localType}\n`;
+    s += `SHOW_REMOTE=${cfg.showRemote}\n`;
+    s += `REMOTE_TEMP_TYPE=${cfg.remoteType}\n`;
     try {
         GLib.mkdir_with_parents(GLib.path_get_dirname(CONFIG), 0o755);
         GLib.file_set_contents(CONFIG, s);
