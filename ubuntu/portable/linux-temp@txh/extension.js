@@ -108,7 +108,7 @@ export default class LinuxTempExtension extends Extension {
         this._button.add_child(this._box);
         this._button.tooltip_text = 'linux-cpu温度：未配置';
 
-        const head = new PopupMenu.PopupMenuItem('本机    远程', {reactive: false});
+        const head = new PopupMenu.PopupMenuItem('本机         远程', {reactive: false});
         this._button.menu.addMenuItem(head);
         this._button.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._refreshItem = new PopupMenu.PopupMenuItem('刷新');
@@ -117,6 +117,15 @@ export default class LinuxTempExtension extends Extension {
         this._settingsItem = new PopupMenu.PopupMenuItem('设置…');
         this._settingsItem.connect('activate', () => Main.extensionManager.openExtensionPrefs(this.metadata.uuid, ''));
         this._button.menu.addMenuItem(this._settingsItem);
+
+        const centerItem = (item) => {
+            item.actor.x_expand = true;
+            item.label.x_expand = true;
+            item.label.x_align = Clutter.ActorAlign.CENTER;
+        };
+        centerItem(head);
+        centerItem(this._refreshItem);
+        centerItem(this._settingsItem);
 
         Main.panel.addToStatusArea(ROLE, this._button);
         this._lastLocal = null;
