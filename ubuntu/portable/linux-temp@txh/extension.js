@@ -115,7 +115,7 @@ export default class LinuxTempExtension extends Extension {
         this._refreshItem.connect('activate', () => { this._readLocalNow(); this._readRemoteNow(); });
         this._button.menu.addMenuItem(this._refreshItem);
         this._settingsItem = new PopupMenu.PopupMenuItem('设置…');
-        this._settingsItem.connect('activate', () => this._openSettings());
+        this._settingsItem.connect('activate', () => Main.extensionManager.openExtensionPrefs(this.metadata.uuid, ''));
         this._button.menu.addMenuItem(this._settingsItem);
 
         Main.panel.addToStatusArea(ROLE, this._button);
