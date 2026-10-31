@@ -276,7 +276,14 @@ export default class LinuxTempExtension extends Extension {
         pageLocal.add_child(hintLocal);
 
         const rowShow = mkRow(pageLocal, '显示本机温度');
-        const swLocal = new St.Switch({active: cfg.showLocal !== 'false'});
+        let showLocal = cfg.showLocal !== 'false';
+        const swLocal = new St.Button({label: showLocal ? '开' : '关', can_focus: true,
+                                       style_class: 'fnos-switch ' + (showLocal ? 'fnos-switch-on' : 'fnos-switch-off')});
+        swLocal.connect('clicked', () => {
+            showLocal = !showLocal;
+            swLocal.set_label(showLocal ? '开' : '关');
+            swLocal.set_style_class_name('fnos-switch ' + (showLocal ? 'fnos-switch-on' : 'fnos-switch-off'));
+        });
         rowShow.add_child(swLocal);
 
         const rowType = mkRow(pageLocal, '温度类型');
@@ -343,7 +350,7 @@ export default class LinuxTempExtension extends Extension {
                     interval: cfg.interval || '5',
                     localInterval: eLocalIv.get_text().trim() || '5',
                     remoteInterval: eRemoteIv.get_text().trim() || '5',
-                    showLocal: swLocal.active ? 'true' : 'false',
+                    showLocal: showLocal ? 'true' : 'false',
                     localType,
                 });
                 this._restartTimers();

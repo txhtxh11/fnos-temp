@@ -82,3 +82,19 @@
   spacing: 12px;
   padding: 6px;
 }
+
+.fnos-switch {
+  width: 64px;
+  padding: 5px 0;
+  border-radius: 14px;
+  text-align: center;
+  font-weight: bold;
+}
+.fnos-switch-on {
+  background-color: #2f6fbf;
+  color: #ffffff;
+}
+.fnos-switch-off {
+  background-color: #3c4149;
+  color: #dfe3e8;
+}
