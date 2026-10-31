@@ -362,20 +362,23 @@ export default class LinuxTempExtension extends Extension {
         eKey.x_expand = true;
         const btnBrowse = new St.Button({label: '浏览…', can_focus: true, style_class: 'fnos-btn'});
         btnBrowse.connect('clicked', () => {
-            const Gtk = imports.gi.Gtk;
-            const dlg = new Gtk.FileChooserNative({
-                title: '选择 SSH 密钥文件',
-                action: Gtk.FileChooserAction.OPEN,
-            });
-            dlg.set_select_multiple(false);
-            dlg.connect('response', (d, res) => {
-                if (res === Gtk.ResponseType.ACCEPT) {
-                    const f = d.get_filename();
-                    if (f) eKey.set_text(f);
-                }
-                d.destroy();
-            });
-            dlg.show();
+            // 用独立进程 zenity 弹文件选择，避免 Gtk 对话框在 Shell 主进程导致崩溃登出
+            try {
+                const { Gio } = imports.gi;
+                const proc = Gio.Subprocess.new(
+                    ['zenity', '--file-selection', '--title=选择 SSH 密钥文件'],
+                    Gio.SubprocessFlags.NONE
+                );
+                proc.wait_async(null, (p, res) => {
+                    try {
+                        if (p.get_exit_status() === 0) {
+                            const [out] = p.communicate_utf8(null, null);
+                            const f = (out || '').trim();
+                            if (f) eKey.set_text(f);
+                        }
+                    } catch (e) { log('browse wait err: ' + e); }
+                });
+            } catch (e) { log('browse spawn err: ' + e); }
         });
         keyRow.add_child(keyLab);
         keyRow.add_child(eKey);
