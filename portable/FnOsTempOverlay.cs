@@ -483,7 +483,7 @@ done
             MaximizeBox = false;
             MinimizeBox = false;
             TopMost = true;
-            ClientSize = new Size(500, 470);
+            ClientSize = new Size(600, 470);
             Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular, GraphicsUnit.Point);
 
             // 品牌行：左 名称+版本，右 TXH
