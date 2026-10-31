@@ -73,12 +73,13 @@ function mkSpin(label, val) {
 function mkType(label, cur) {
     const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
     box.append(new Gtk.Label({ label, halign: Gtk.Align.START }));
-    const combo = Gtk.ComboBoxText.new();
-    combo.append('avg', '平均温度');
-    combo.append('max', '最高温度');
-    combo.active_id = cur || 'avg';
-    box.append(combo);
-    return { box, combo };
+    const list = new Gtk.StringList();
+    list.append('平均温度');
+    list.append('最高温度');
+    const dd = new Gtk.DropDown({ model: list });
+    dd.selected = (cur === 'max') ? 1 : 0;
+    box.append(dd);
+    return { box, dd };
 }
 function mkEntry(label, widthChars) {
     const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
@@ -160,7 +161,7 @@ export default class Prefs {
         const bReset = new Gtk.Button({ label: '恢复默认' });
         bReset.connect('clicked', () => {
             eHost.entry.set_text(''); eUser.entry.set_text('t'); ePort.entry.set_text('22'); eKey.set_text(''); ePass.entry.set_text('');
-            lIv.spin.set_value(5); rIv.spin.set_value(5); lTy.combo.active_id = 'avg'; rTy.combo.active_id = 'avg';
+            lIv.spin.set_value(5); rIv.spin.set_value(5); lTy.dd.selected = 0; rTy.dd.selected = 0;
             swL.sw.set_active(true); swR.sw.set_active(true);
         });
         const bSave = new Gtk.Button({ label: '保存' });
@@ -176,9 +177,9 @@ export default class Prefs {
                 localInterval: String(Math.round(lIv.spin.value)),
                 remoteInterval: String(Math.round(rIv.spin.value)),
                 showLocal: swL.sw.active ? 'true' : 'false',
-                localType: lTy.combo.active_id || 'avg',
+                localType: lTy.dd.selected === 1 ? 'max' : 'avg',
                 showRemote: swR.sw.active ? 'true' : 'false',
-                remoteType: rTy.combo.active_id || 'avg',
+                remoteType: rTy.dd.selected === 1 ? 'max' : 'avg',
             });
         });
         bar.append(bReset); bar.append(bSave);
