@@ -1,0 +1,134 @@
+/* Freon 风格：浅色卡片 + 三列布局 + 红橙开关 */
+.fnos-dialog {
+  background-color: #f6f7f9;
+  border: 1px solid #d9dce1;
+  border-radius: 12px;
+  padding: 18px 10px 10px 18px;
+  spacing: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.fnos-title {
+  font-size: 14pt;
+  font-weight: bold;
+  color: #1c1c1c;
+}
+.fnos-brand {
+  width: 100%;
+  spacing: 16px;
+  padding: 0 12px 12px 0;
+}
+.fnos-brand-right {
+  text-align: right;
+}
+.fnos-cols {
+  spacing: 0;
+}
+.fnos-col {
+  width: 292px;
+  spacing: 7px;
+  padding: 0 16px 10px 16px;
+  border-right: 1px solid #e4e7ea;
+}
+.fnos-col:last-child {
+  border-right: none;
+}
+.fnos-col-title {
+  font-size: 12pt;
+  font-weight: bold;
+  color: #2f2f2f;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e4e7ea;
+}
+.fnos-sub-title {
+  font-size: 10pt;
+  font-weight: bold;
+  color: #555555;
+  padding-top: 8px;
+}
+.fnos-row {
+  spacing: 8px;
+}
+.fnos-label {
+  color: #333333;
+  font-size: 10pt;
+}
+.fnos-entry {
+  background-color: #ffffff;
+  border: 1px solid #c8cdd3;
+  color: #222222;
+  padding: 6px;
+  border-radius: 6px;
+}
+.fnos-hint {
+  font-size: 9pt;
+  color: #6a7076;
+}
+.fnos-switch {
+  width: 56px;
+  padding: 5px 0;
+  border-radius: 13px;
+  text-align: center;
+  font-weight: bold;
+}
+.fnos-switch-on {
+  background-color: #e95420;
+  color: #ffffff;
+}
+.fnos-switch-off {
+  background-color: #d7dae0;
+  color: #555555;
+}
+.fnos-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  background-color: #eceef1;
+  color: #333333;
+}
+.fnos-btn-active {
+  background-color: #e95420;
+  color: #ffffff;
+}
+.fnos-type {
+  spacing: 6px;
+}
+
+.fnos-step {
+  width: 28px;
+  padding: 3px 0;
+  border-radius: 6px;
+  background-color: #eceef1;
+  color: #333333;
+  font-weight: bold;
+}
+.fnos-stepval {
+  width: 34px;
+  text-align: center;
+  color: #222222;
+  font-size: 11pt;
+}
+.fnos-close {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #555555;
+  font-size: 13pt;
+}
+.fnos-close:hover {
+  background-color: #e4e7ea;
+}
+.fnos-browse {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #c8cdd3;
+  background-color: #ffffff;
+  color: #222222;
+  text-align: left;
+}
+.fnos-browse:hover {
+  background-color: #e95420;
+  color: #ffffff;
+}
+
+.fnos-picker {
+  spacing: 6px;
+}
