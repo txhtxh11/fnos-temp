@@ -73,13 +73,18 @@ function mkSpin(label, val) {
 function mkType(label, cur) {
     const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
     box.append(new Gtk.Label({ label, halign: Gtk.Align.START }));
-    const list = new Gtk.StringList();
-    list.append('平均温度');
-    list.append('最高温度');
-    const dd = new Gtk.DropDown({ model: list });
-    dd.selected = (cur === 'max') ? 1 : 0;
-    box.append(dd);
-    return { box, dd };
+    const btn = new Gtk.MenuButton({ label: (cur === 'max') ? '最高温度' : '平均温度' });
+    const pop = new Gtk.Popover();
+    const vb = new Gtk.Box({ orientation: Gtk.Orientation.VERTICAL });
+    const bAvg = new Gtk.Button({ label: '平均温度', css_classes: ['flat'] });
+    const bMax = new Gtk.Button({ label: '最高温度', css_classes: ['flat'] });
+    vb.append(bAvg); vb.append(bMax);
+    pop.set_child(vb);
+    btn.set_popover(pop);
+    bAvg.connect('clicked', () => { btn.label = '平均温度'; pop.popdown(); });
+    bMax.connect('clicked', () => { btn.label = '最高温度'; pop.popdown(); });
+    box.append(btn);
+    return { box, btn };
 }
 function mkEntry(label, widthChars) {
     const box = new Gtk.Box({ orientation: Gtk.Orientation.HORIZONTAL, spacing: 8 });
@@ -161,7 +166,7 @@ export default class Prefs {
         const bReset = new Gtk.Button({ label: '恢复默认' });
         bReset.connect('clicked', () => {
             eHost.entry.set_text(''); eUser.entry.set_text('t'); ePort.entry.set_text('22'); eKey.set_text(''); ePass.entry.set_text('');
-            lIv.spin.set_value(5); rIv.spin.set_value(5); lTy.dd.selected = 0; rTy.dd.selected = 0;
+            lIv.spin.set_value(5); rIv.spin.set_value(5); lTy.btn.label = '平均温度'; rTy.btn.label = '平均温度';
             swL.sw.set_active(true); swR.sw.set_active(true);
         });
         const bSave = new Gtk.Button({ label: '保存' });
@@ -177,9 +182,9 @@ export default class Prefs {
                 localInterval: String(Math.round(lIv.spin.value)),
                 remoteInterval: String(Math.round(rIv.spin.value)),
                 showLocal: swL.sw.active ? 'true' : 'false',
-                localType: lTy.dd.selected === 1 ? 'max' : 'avg',
+                localType: lTy.btn.label === '最高温度' ? 'max' : 'avg',
                 showRemote: swR.sw.active ? 'true' : 'false',
-                remoteType: rTy.dd.selected === 1 ? 'max' : 'avg',
+                remoteType: rTy.btn.label === '最高温度' ? 'max' : 'avg',
             });
         });
         bar.append(bReset); bar.append(bSave);
